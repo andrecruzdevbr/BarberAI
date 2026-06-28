@@ -1,0 +1,64 @@
+# =========================
+# BarberAI — Monorepo
+# =========================
+
+# --- Ambiente e segredos ---
+.env
+.env.local
+.env.*.local
+*.pem
+
+# --- Sistema operacional ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- IDEs ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- Frontend (Next.js) ---
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.vercel/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
+# --- Backend (Python) ---
+backend/.venv/
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.py[cod]
+backend/**/*$py.class
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/*.egg-info/
+backend/dist/
+backend/build/
+
+# --- Docker (volumes locais, se houver) ---
+docker-data/
+
+# --- Testes e cobertura ---
+coverage/
+.coverage
+htmlcov/
+.nyc_output/
+
+# --- Misc ---
+*.bak
+*.tmp
