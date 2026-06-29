@@ -33,7 +33,7 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: "8000"
       CORS_ORIGINS: http://localhost:3000
-      # DATABASE_URL: postgresql://barberai:barberai@postgres:5432/barberai  # Dia 2+
+      DATABASE_URL: postgresql+psycopg://barberai:barberai@postgres:5432/barberai
     depends_on:
       postgres:
         condition: service_healthy

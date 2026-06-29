@@ -12,6 +12,8 @@ RUN addgroup --system app && adduser --system --ingroup app app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY alembic.ini .
+COPY alembic ./alembic
 COPY app ./app
 
 USER app

@@ -19,16 +19,17 @@ Plano de execução do MVP técnico. Cada dia tem entrega verificável e escopo 
 
 ---
 
-## Dia 2 — Banco de dados e modelos base
+## Dia 2 — Banco de dados e modelos base ✅
 
 **Objetivo:** PostgreSQL conectado, primeiras entidades e migrações.
 
-- [ ] Ativar SQLAlchemy, Alembic e psycopg2 no `requirements.txt`
-- [ ] Configurar `DATABASE_URL` e session factory em `core/`
-- [ ] Modelos: `Barbershop`, `User`, `Service`, `Client`, `Appointment`
-- [ ] Primeira migração Alembic
-- [ ] Subir stack com `docker compose up postgres backend`
-- [ ] Testar conexão via health check estendido ou endpoint `/db-check`
+- [x] Ativar SQLAlchemy, Alembic e psycopg[binary] no `requirements.txt`
+- [x] Configurar `DATABASE_URL` e session factory em `core/database.py`
+- [x] Modelos: `Barbershop`, `User`, `Service`, `Client`, `Appointment`
+- [x] Enums PostgreSQL: `user_role`, `appointment_status`
+- [x] Primeira migração Alembic (`72bef4528e3d_initial_schema`)
+- [x] Subir stack com `docker compose up --build -d`
+- [x] Health check com `SELECT 1` retornando `database: ok`
 
 **Entrega:** Tabelas criadas via migração; backend conecta ao Postgres.
 

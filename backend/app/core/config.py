@@ -23,6 +23,10 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000"
 
+    database_url: str = (
+        "postgresql+psycopg://barberai:barberai@localhost:5432/barberai"
+    )
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Converte CORS_ORIGINS (string separada por vírgula) em lista."""
