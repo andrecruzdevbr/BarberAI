@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import decode_access_token, parse_token_subject
+from app.models.enums import UserRole
 from app.models.user import User
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -53,3 +54,21 @@ def get_current_user(
         raise _unauthorized()
 
     return user
+
+
+def require_roles(*roles: UserRole):
+    """Factory — exige que o usuário autenticado possua uma das roles."""
+
+    def _dependency(user: User = Depends(get_current_user)) -> User:
+        if user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permissão insuficiente.",
+            )
+        return user
+
+    return _dependency
+
+
+require_owner = require_roles(UserRole.OWNER)
+require_owner_or_receptionist = require_roles(UserRole.OWNER, UserRole.RECEPTIONIST)
