@@ -32,8 +32,10 @@ services:
       APP_DEBUG: "true"
       API_HOST: 0.0.0.0
       API_PORT: "8000"
-      CORS_ORIGINS: http://localhost:3000
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
       DATABASE_URL: postgresql+psycopg://barberai:barberai@postgres:5432/barberai
+    env_file:
+      - ./backend/.env
     depends_on:
       postgres:
         condition: service_healthy

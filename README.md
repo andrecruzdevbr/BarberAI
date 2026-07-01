@@ -92,16 +92,25 @@ Serviços:
 
 Copie `backend/.env.example` para `backend/.env` e ajuste conforme necessário. **Nunca commite arquivos `.env` com segredos reais.**
 
-## Status atual (Dia 1)
+## Autenticação e SaaS (Dia 3)
 
-- [x] Monorepo estruturado
-- [x] Frontend Next.js existente preservado
-- [x] Backend scaffold com health check
-- [x] Documentação inicial
-- [x] Docker Compose preparado
-- [ ] Banco de dados e modelos *(Dia 2)*
-- [ ] Autenticação JWT *(Dia 3)*
-- [ ] Telas e integração completa *(Dia 6)*
+- **JWT** (HS256) com token Bearer e expiração configurável
+- **Onboarding** — `POST /api/v1/auth/register` cria barbearia + usuário `owner` em transação única
+- **Login** — `POST /api/v1/auth/login` e perfil em `GET /api/v1/auth/me`
+- **Multi-barbearia** — cada usuário pertence a uma `Barbershop`; tenant vem do token, nunca do frontend
+- **Papéis** — `owner`, `barber`, `receptionist`
+
+Variáveis JWT em `backend/.env.example` (`JWT_SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES`).
+
+Frontend: `NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1` em `frontend/.env.example`.
+
+## Status atual
+
+- [x] Monorepo, Docker, PostgreSQL e modelos
+- [x] Autenticação JWT e cadastro de barbearia
+- [x] Telas iniciais: home, register, login, dashboard
+- [ ] CRUD de serviços e clientes *(Dia 4)*
+- [ ] Agenda funcional *(Dia 5)*
 
 ## Licença
 

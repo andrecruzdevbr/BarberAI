@@ -21,11 +21,15 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
 
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     database_url: str = (
         "postgresql+psycopg://barberai:barberai@localhost:5432/barberai"
     )
+
+    jwt_secret_key: str = "change-me-in-local-env-only"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 480
 
     @property
     def cors_origins_list(self) -> list[str]:
