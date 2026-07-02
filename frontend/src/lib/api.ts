@@ -22,6 +22,48 @@ export type AuthResponse = {
   user: UserProfile;
 };
 
+export type Client = {
+  id: string;
+  full_name: string;
+  phone: string;
+  email: string | null;
+  notes: string | null;
+  is_active: boolean;
+};
+
+export type Service = {
+  id: string;
+  name: string;
+  description: string | null;
+  duration_minutes: number;
+  price: string;
+  is_active: boolean;
+};
+
+export type TeamMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: "owner" | "barber" | "receptionist";
+  is_active: boolean;
+  created_at: string;
+};
+
+export type AvailabilitySlot = {
+  id?: string;
+  weekday: number;
+  start_time: string;
+  end_time: string;
+  is_active: boolean;
+};
+
+export type DashboardSummary = {
+  active_clients: number;
+  active_services: number;
+  active_barbers: number;
+  active_receptionists: number;
+};
+
 export class ApiError extends Error {
   status: number;
 
@@ -96,4 +138,120 @@ export async function login(payload: {
 
 export async function getMe(): Promise<UserProfile> {
   return apiFetch<UserProfile>("/auth/me", { method: "GET" }, true);
+}
+
+export async function getDashboardSummary(): Promise<DashboardSummary> {
+  return apiFetch<DashboardSummary>("/dashboard/summary", { method: "GET" }, true);
+}
+
+export async function listClients(search?: string, includeInactive = true): Promise<Client[]> {
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (includeInactive) params.set("include_inactive", "true");
+  const query = params.toString();
+  return apiFetch<Client[]>(`/clients${query ? `?${query}` : ""}`, { method: "GET" }, true);
+}
+
+export async function createClient(payload: {
+  full_name: string;
+  phone: string;
+  email?: string;
+  notes?: string;
+}): Promise<Client> {
+  return apiFetch<Client>("/clients", { method: "POST", body: JSON.stringify(payload) }, true);
+}
+
+export async function updateClient(
+  id: string,
+  payload: Partial<{
+    full_name: string;
+    phone: string;
+    email: string | null;
+    notes: string | null;
+    is_active: boolean;
+  }>,
+): Promise<Client> {
+  return apiFetch<Client>(`/clients/${id}`, { method: "PUT", body: JSON.stringify(payload) }, true);
+}
+
+export async function deactivateClient(id: string): Promise<Client> {
+  return apiFetch<Client>(`/clients/${id}`, { method: "DELETE" }, true);
+}
+
+export async function listServices(includeInactive = false): Promise<Service[]> {
+  const params = includeInactive ? "?include_inactive=true" : "";
+  return apiFetch<Service[]>(`/services${params}`, { method: "GET" }, true);
+}
+
+export async function createService(payload: {
+  name: string;
+  description?: string;
+  duration_minutes: number;
+  price: number;
+}): Promise<Service> {
+  return apiFetch<Service>("/services", { method: "POST", body: JSON.stringify(payload) }, true);
+}
+
+export async function updateService(
+  id: string,
+  payload: Partial<{
+    name: string;
+    description: string | null;
+    duration_minutes: number;
+    price: number;
+    is_active: boolean;
+  }>,
+): Promise<Service> {
+  return apiFetch<Service>(`/services/${id}`, { method: "PUT", body: JSON.stringify(payload) }, true);
+}
+
+export async function deactivateService(id: string): Promise<Service> {
+  return apiFetch<Service>(`/services/${id}`, { method: "DELETE" }, true);
+}
+
+export async function listTeam(): Promise<TeamMember[]> {
+  return apiFetch<TeamMember[]>("/team", { method: "GET" }, true);
+}
+
+export async function getTeamMember(id: string): Promise<TeamMember> {
+  return apiFetch<TeamMember>(`/team/${id}`, { method: "GET" }, true);
+}
+
+export async function createTeamMember(payload: {
+  name: string;
+  email: string;
+  temporary_password: string;
+  role: "barber" | "receptionist";
+}): Promise<TeamMember> {
+  return apiFetch<TeamMember>("/team", { method: "POST", body: JSON.stringify(payload) }, true);
+}
+
+export async function updateTeamMember(
+  id: string,
+  payload: Partial<{
+    name: string;
+    role: "barber" | "receptionist";
+    is_active: boolean;
+  }>,
+): Promise<TeamMember> {
+  return apiFetch<TeamMember>(`/team/${id}`, { method: "PUT", body: JSON.stringify(payload) }, true);
+}
+
+export async function deactivateTeamMember(id: string): Promise<TeamMember> {
+  return apiFetch<TeamMember>(`/team/${id}`, { method: "DELETE" }, true);
+}
+
+export async function getBarberAvailability(barberId: string): Promise<AvailabilitySlot[]> {
+  return apiFetch<AvailabilitySlot[]>(`/team/${barberId}/availability`, { method: "GET" }, true);
+}
+
+export async function replaceBarberAvailability(
+  barberId: string,
+  slots: Omit<AvailabilitySlot, "id">[],
+): Promise<AvailabilitySlot[]> {
+  return apiFetch<AvailabilitySlot[]>(
+    `/team/${barberId}/availability`,
+    { method: "PUT", body: JSON.stringify(slots) },
+    true,
+  );
 }

@@ -1,109 +1,69 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { buttonSecondaryClassName } from "@/components/AuthShell";
-import { getMe, ApiError, type UserProfile } from "@/lib/api";
-import { clearToken, getToken } from "@/lib/auth";
-
-const roleLabels: Record<UserProfile["role"], string> = {
-  owner: "Dono",
-  barber: "Barbeiro",
-  receptionist: "Recepcionista",
-};
+import { AppShell } from "@/components/AppShell";
+import { getDashboardSummary, getMe, ApiError, type DashboardSummary, type UserProfile } from "@/lib/api";
+import { roleLabels } from "@/lib/roles";
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!getToken()) {
-      router.replace("/login");
-      return;
-    }
-
-    getMe()
-      .then(setUser)
+    Promise.all([getMe(), getDashboardSummary()])
+      .then(([profile, data]) => {
+        setUser(profile);
+        setSummary(data);
+      })
       .catch((err) => {
-        if (err instanceof ApiError && err.status === 401) {
-          clearToken();
-          router.replace("/login");
-          return;
-        }
-        setError(err instanceof ApiError ? err.message : "Erro ao carregar perfil.");
+        setError(err instanceof ApiError ? err.message : "Erro ao carregar dashboard.");
       })
       .finally(() => setLoading(false));
-  }, [router]);
-
-  function handleLogout() {
-    clearToken();
-    router.push("/login");
-  }
-
-  if (loading) {
-    return (
-      <div className="flex min-h-full items-center justify-center text-muted">
-        Carregando painel...
-      </div>
-    );
-  }
-
-  if (error || !user) {
-    return (
-      <div className="flex min-h-full flex-col items-center justify-center gap-4 px-4">
-        <p className="text-red-300">{error ?? "Não foi possível carregar o painel."}</p>
-        <button type="button" onClick={handleLogout} className={buttonSecondaryClassName}>
-          Voltar ao login
-        </button>
-      </div>
-    );
-  }
+  }, []);
 
   return (
-    <div className="min-h-full">
-      <header className="border-b border-border px-6 py-4">
-        <div className="mx-auto flex max-w-4xl items-center justify-between">
-          <span className="text-xl font-bold text-white">
-            Barber<span className="text-accent">AI</span>
-          </span>
-          <button type="button" onClick={handleLogout} className={buttonSecondaryClassName}>
-            Sair
-          </button>
+    <AppShell title="Dashboard">
+      {loading && <p className="text-muted">Carregando dados...</p>}
+
+      {error && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {error}
         </div>
-      </header>
+      )}
 
-      <main className="mx-auto max-w-4xl px-6 py-12">
-        <div className="rounded-2xl border border-border bg-card p-8 shadow-xl shadow-black/20">
-          <p className="text-sm font-medium uppercase tracking-widest text-accent">Painel</p>
-          <h1 className="mt-3 text-2xl font-bold text-white">{user.barbershop.name}</h1>
-          <p className="mt-2 text-muted">Olá, {user.name}</p>
+      {!loading && !error && user && summary && (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-border bg-card p-6">
+            <p className="text-sm font-medium uppercase tracking-widest text-accent">Visão geral</p>
+            <h2 className="mt-2 text-2xl font-bold text-white">{user.barbershop.name}</h2>
+            <p className="mt-1 text-muted">
+              Olá, {user.name} — {roleLabels[user.role]}
+            </p>
+          </div>
 
-          <dl className="mt-8 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-border bg-background/50 p-4">
-              <dt className="text-xs uppercase tracking-wide text-muted">Barbearia</dt>
-              <dd className="mt-1 font-medium text-white">{user.barbershop.name}</dd>
-            </div>
-            <div className="rounded-xl border border-border bg-background/50 p-4">
-              <dt className="text-xs uppercase tracking-wide text-muted">Função</dt>
-              <dd className="mt-1 font-medium text-white">{roleLabels[user.role]}</dd>
-            </div>
-            <div className="rounded-xl border border-border bg-background/50 p-4">
-              <dt className="text-xs uppercase tracking-wide text-muted">E-mail</dt>
-              <dd className="mt-1 font-medium text-white">{user.email}</dd>
-            </div>
-            <div className="rounded-xl border border-border bg-background/50 p-4">
-              <dt className="text-xs uppercase tracking-wide text-muted">Slug</dt>
-              <dd className="mt-1 font-medium text-white">{user.barbershop.slug}</dd>
-            </div>
-          </dl>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Clientes ativos" value={summary.active_clients} />
+            <StatCard label="Serviços ativos" value={summary.active_services} />
+            <StatCard label="Barbeiros ativos" value={summary.active_barbers} />
+            <StatCard label="Recepcionistas ativos" value={summary.active_receptionists} />
+          </div>
 
-          <p className="mt-8 rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-slate-200">
-            Sua barbearia está pronta para começar.
+          <p className="rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-slate-200">
+            Dados reais da sua barbearia. Agenda e faturamento serão exibidos nas próximas etapas.
           </p>
         </div>
-      </main>
+      )}
+    </AppShell>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-2 text-3xl font-bold text-white">{value}</p>
     </div>
   );
 }

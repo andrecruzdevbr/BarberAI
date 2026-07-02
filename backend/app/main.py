@@ -8,8 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
 from app.api.clients import router as clients_router
+from app.api.dashboard import router as dashboard_router
 from app.api.health import router as health_router
 from app.api.services import router as services_router
+from app.api.team import router as team_router
 from app.core.config import get_settings
 
 
@@ -43,6 +45,8 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
     app.include_router(clients_router, prefix="/api/v1/clients", tags=["clients"])
     app.include_router(services_router, prefix="/api/v1/services", tags=["services"])
+    app.include_router(team_router, prefix="/api/v1/team", tags=["team"])
+    app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["dashboard"])
 
     @app.get("/", tags=["root"])
     def root() -> dict[str, str]:

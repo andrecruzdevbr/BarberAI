@@ -107,9 +107,14 @@ Frontend: `NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1` em `frontend/.env.e
 ## Status atual
 
 - [x] Monorepo, Docker, PostgreSQL e modelos
-- [x] Autenticação JWT e cadastro de barbearia
-- [x] Telas iniciais: home, register, login, dashboard
-- [ ] CRUD de serviços e clientes *(Dia 4)*
+- [x] Autenticação JWT e cadastro de barbearia (onboarding)
+- [x] Multi-tenant SaaS (isolamento por `barbershop_id` via JWT)
+- [x] CRUD de clientes (owner e recepcionista)
+- [x] CRUD de serviços (owner; leitura para toda equipe)
+- [x] Gestão de equipe — cadastro de barbeiros e recepcionistas (owner)
+- [x] Disponibilidade semanal de barbeiros
+- [x] Dashboard com totais reais da barbearia
+- [x] Telas: home, register, login, dashboard, clientes, serviços, equipe
 - [ ] Agenda funcional *(Dia 5)*
 
 ## Licença
