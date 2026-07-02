@@ -8,8 +8,18 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_owner
 from app.models.user import User
-from app.schemas.availability import AvailabilitySlotInput, AvailabilitySlotResponse
-from app.schemas.team import TeamMemberCreate, TeamMemberResponse, TeamMemberUpdate
+from app.schemas.availability import (
+    AvailabilityInterpretRequest,
+    AvailabilityInterpretResponse,
+    AvailabilitySlotInput,
+    AvailabilitySlotResponse,
+)
+from app.schemas.team import (
+    TeamMemberCreate,
+    TeamMemberResponse,
+    TeamMemberSelfUpdate,
+    TeamMemberUpdate,
+)
 from app.services import availability as availability_service
 from app.services import team as team_service
 
@@ -35,6 +45,32 @@ def create_team_member(
     return team_service.create_team_member(db, current_user, data)
 
 
+@router.put("/me", response_model=TeamMemberResponse)
+def update_self_profile(
+    data: TeamMemberSelfUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TeamMemberResponse:
+    """Atualiza nome e WhatsApp do próprio perfil."""
+    return team_service.update_team_member_self(db, current_user, data)
+
+
+@router.post(
+    "/{barber_id}/availability/interpret",
+    response_model=AvailabilityInterpretResponse,
+)
+def interpret_barber_availability(
+    barber_id: UUID,
+    data: AvailabilityInterpretRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AvailabilityInterpretResponse:
+    """Interpreta horários em linguagem natural sem salvar."""
+    return availability_service.interpret_availability(
+        db, current_user, barber_id, data.message,
+    )
+
+
 @router.get("/{barber_id}/availability", response_model=list[AvailabilitySlotResponse])
 def get_barber_availability(
     barber_id: UUID,
@@ -50,9 +86,9 @@ def replace_barber_availability(
     barber_id: UUID,
     slots: list[AvailabilitySlotInput],
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner),
+    current_user: User = Depends(get_current_user),
 ) -> list[AvailabilitySlotResponse]:
-    """Substitui disponibilidade semanal completa (somente owner)."""
+    """Substitui disponibilidade semanal completa."""
     return availability_service.replace_availability(db, current_user, barber_id, slots)
 
 

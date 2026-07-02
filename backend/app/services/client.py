@@ -6,14 +6,15 @@ from fastapi import HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core.phone import normalize_and_validate_whatsapp
 from app.models.client import Client
 from app.models.user import User
 from app.schemas.client import ClientCreate, ClientResponse, ClientUpdate
 
 
 def normalize_phone(phone: str) -> str:
-    """Remove espaços externos do telefone/WhatsApp."""
-    return phone.strip()
+    """Normaliza WhatsApp do cliente."""
+    return normalize_and_validate_whatsapp(phone)
 
 
 def list_clients(

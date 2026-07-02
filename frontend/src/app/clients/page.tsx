@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { buttonPrimaryClassName, Field, inputClassName } from "@/components/AuthShell";
+import { WhatsAppButton, WhatsAppLink } from "@/components/WhatsAppLink";
 import {
   ApiError,
   createClient,
@@ -132,7 +133,7 @@ export default function ClientsPage() {
   }
 
   return (
-    <AppShell title="Clientes">
+    <AppShell title="Clientes e histórico">
       {!canManage && !loading && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
           {error ?? "Permissão insuficiente para acessar clientes."}
@@ -141,11 +142,16 @@ export default function ClientsPage() {
 
       {canManage && (
         <>
+          <p className="mb-6 text-sm text-muted">
+            Clientes serão criados automaticamente a partir de agendamentos. Aqui você consulta
+            histórico, atualiza dados e entra em contato pelo WhatsApp.
+          </p>
+
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <form onSubmit={handleSearch} className="flex flex-1 gap-2">
               <input
                 type="search"
-                placeholder="Buscar por nome ou telefone..."
+                placeholder="Buscar por nome ou WhatsApp..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className={inputClassName}
@@ -154,8 +160,12 @@ export default function ClientsPage() {
                 Buscar
               </button>
             </form>
-            <button type="button" onClick={openCreate} className={`${buttonPrimaryClassName} sm:w-auto`}>
-              Novo cliente
+            <button
+              type="button"
+              onClick={openCreate}
+              className="shrink-0 text-sm text-muted underline-offset-2 hover:text-slate-200 hover:underline"
+            >
+              Cadastro manual
             </button>
           </div>
 
@@ -178,7 +188,7 @@ export default function ClientsPage() {
                 <thead className="border-b border-border bg-card text-left text-muted">
                   <tr>
                     <th className="px-4 py-3 font-medium">Nome</th>
-                    <th className="px-4 py-3 font-medium">Telefone</th>
+                    <th className="px-4 py-3 font-medium">WhatsApp</th>
                     <th className="px-4 py-3 font-medium">E-mail</th>
                     <th className="px-4 py-3 font-medium">Status</th>
                     <th className="px-4 py-3 font-medium">Ações</th>
@@ -188,7 +198,12 @@ export default function ClientsPage() {
                   {clients.map((client) => (
                     <tr key={client.id} className="border-b border-border/60">
                       <td className="px-4 py-3 text-white">{client.full_name}</td>
-                      <td className="px-4 py-3">{client.phone}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <WhatsAppLink phone={client.phone} />
+                          <WhatsAppButton phone={client.phone} />
+                        </div>
+                      </td>
                       <td className="px-4 py-3">{client.email ?? "—"}</td>
                       <td className="px-4 py-3">
                         <StatusBadge active={client.is_active} />
@@ -234,7 +249,7 @@ export default function ClientsPage() {
                 className={inputClassName}
               />
             </Field>
-            <Field label="Telefone" id="phone">
+            <Field label="WhatsApp" id="phone">
               <input
                 id="phone"
                 required

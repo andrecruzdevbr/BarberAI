@@ -114,8 +114,14 @@ Frontend: `NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1` em `frontend/.env.e
 - [x] Gestão de equipe — cadastro de barbeiros e recepcionistas (owner)
 - [x] Disponibilidade semanal de barbeiros
 - [x] Dashboard com totais reais da barbearia
-- [x] Telas: home, register, login, dashboard, clientes, serviços, equipe
+- [x] WhatsApp como contato principal (equipe, clientes e barbearia)
+- [x] Links diretos para conversa no WhatsApp (`wa.me`)
+- [x] Disponibilidade por assistente de horários (interpretação local)
+- [x] Preparação para futura página pública de agendamento
+- [x] Telas: home, register, login, dashboard, clientes, serviços, equipe, configurações
 - [ ] Agenda funcional *(Dia 5)*
+- [ ] Página pública de agendamento *(Dia 5)*
+- [ ] Confirmação automática por WhatsApp *(futuro)*
 
 ## Licença
 

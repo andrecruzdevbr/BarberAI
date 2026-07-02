@@ -32,6 +32,7 @@ class Barbershop(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    whatsapp: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
 
     users: Mapped[list[User]] = relationship(
         "User",

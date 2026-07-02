@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password, normalize_email
 from app.models.enums import UserRole
 from app.models.user import User
-from app.schemas.team import TeamMemberCreate, TeamMemberResponse, TeamMemberUpdate
+from app.schemas.team import (
+    TeamMemberCreate,
+    TeamMemberResponse,
+    TeamMemberSelfUpdate,
+    TeamMemberUpdate,
+)
 
 
 def list_team_members(db: Session, user: User) -> list[TeamMemberResponse]:
@@ -48,6 +53,7 @@ def create_team_member(
         barbershop_id=user.barbershop_id,
         name=data.name,
         email=email,
+        whatsapp=data.whatsapp,
         password_hash=hash_password(data.temporary_password),
         role=data.role,
         is_active=True,
@@ -93,6 +99,8 @@ def update_team_member(
 
     if "name" in updates and updates["name"] is not None:
         member.name = updates["name"]
+    if "whatsapp" in updates and updates["whatsapp"] is not None:
+        member.whatsapp = updates["whatsapp"]
     if "role" in updates and updates["role"] is not None:
         member.role = updates["role"]
     if "is_active" in updates and updates["is_active"] is not None:
@@ -101,6 +109,32 @@ def update_team_member(
     db.commit()
     db.refresh(member)
     return TeamMemberResponse.model_validate(member)
+
+
+def update_team_member_self(
+    db: Session,
+    user: User,
+    data: TeamMemberSelfUpdate,
+) -> TeamMemberResponse:
+    """Atualiza nome e WhatsApp do próprio perfil."""
+    if user.role not in (UserRole.BARBER, UserRole.RECEPTIONIST):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permissão insuficiente.",
+        )
+
+    updates = data.model_dump(exclude_unset=True)
+    if not updates:
+        return TeamMemberResponse.model_validate(user)
+
+    if "name" in updates and updates["name"] is not None:
+        user.name = updates["name"]
+    if "whatsapp" in updates and updates["whatsapp"] is not None:
+        user.whatsapp = updates["whatsapp"]
+
+    db.commit()
+    db.refresh(user)
+    return TeamMemberResponse.model_validate(user)
 
 
 def deactivate_team_member(
@@ -147,7 +181,10 @@ def _get_member_or_404(db: Session, user: User, user_id: UUID) -> User:
 def _assert_can_view_member(current: User, member: User) -> None:
     if current.role == UserRole.OWNER:
         return
-    if current.role == UserRole.BARBER and current.id == member.id:
+    if current.id == member.id and current.role in (
+        UserRole.BARBER,
+        UserRole.RECEPTIONIST,
+    ):
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

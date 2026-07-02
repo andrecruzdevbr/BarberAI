@@ -16,7 +16,7 @@ const navItems: NavItem[] = [
   { href: "/team", label: "Equipe" },
   { href: "/assistant", label: "Assistente IA", soon: true },
   { href: "/products", label: "Produtos", soon: true },
-  { href: "/settings", label: "Configurações", soon: true },
+  { href: "/settings", label: "Configurações" },
 ];
 
 type SidebarProps = {

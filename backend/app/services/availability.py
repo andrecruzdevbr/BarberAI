@@ -43,13 +43,8 @@ def replace_availability(
     slots: list[AvailabilitySlotInput],
 ) -> list[AvailabilitySlotResponse]:
     """Substitui atomicamente a disponibilidade semanal de um barbeiro."""
-    if user.role != UserRole.OWNER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Permissão insuficiente.",
-        )
-
     barber = _get_barber_or_404(db, user, barber_id)
+    _assert_can_edit_availability(user, barber)
 
     if barber.role != UserRole.BARBER:
         raise HTTPException(
@@ -140,3 +135,35 @@ def _assert_can_view_availability(current: User, barber: User) -> None:
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Permissão insuficiente.",
     )
+
+
+def _assert_can_edit_availability(current: User, barber: User) -> None:
+    if current.role == UserRole.OWNER:
+        return
+    if current.role == UserRole.BARBER and current.id == barber.id:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Permissão insuficiente.",
+    )
+
+
+def interpret_availability(
+    db: Session,
+    user: User,
+    barber_id: UUID,
+    message: str,
+):
+    """Interpreta mensagem de horários sem persistir."""
+    from app.services.availability_interpreter import interpret_availability_message
+
+    barber = _get_barber_or_404(db, user, barber_id)
+    _assert_can_edit_availability(user, barber)
+
+    if barber.role != UserRole.BARBER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Somente barbeiros podem possuir disponibilidade.",
+        )
+
+    return interpret_availability_message(message)

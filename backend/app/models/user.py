@@ -44,6 +44,7 @@ class User(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    whatsapp: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(user_role_enum, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

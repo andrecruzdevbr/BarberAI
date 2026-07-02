@@ -1,27 +1,41 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
-import { getDashboardSummary, getMe, ApiError, type DashboardSummary, type UserProfile } from "@/lib/api";
+import {
+  getBarbershopSettings,
+  getDashboardSummary,
+  getMe,
+  ApiError,
+  type BarbershopSettings,
+  type DashboardSummary,
+  type UserProfile,
+} from "@/lib/api";
 import { roleLabels } from "@/lib/roles";
 
 export default function DashboardPage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [settings, setSettings] = useState<BarbershopSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getMe(), getDashboardSummary()])
-      .then(([profile, data]) => {
+    Promise.all([getMe(), getDashboardSummary(), getBarbershopSettings()])
+      .then(([profile, data, shop]) => {
         setUser(profile);
         setSummary(data);
+        setSettings(shop);
       })
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : "Erro ao carregar dashboard.");
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const showWhatsAppWarning =
+    user?.role === "owner" && settings && !settings.whatsapp;
 
   return (
     <AppShell title="Dashboard">
@@ -35,6 +49,15 @@ export default function DashboardPage() {
 
       {!loading && !error && user && summary && (
         <div className="space-y-6">
+          {showWhatsAppWarning && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              Configure o WhatsApp da barbearia antes de ativar o agendamento público.{" "}
+              <Link href="/settings" className="font-medium underline">
+                Ir para configurações
+              </Link>
+            </div>
+          )}
+
           <div className="rounded-2xl border border-border bg-card p-6">
             <p className="text-sm font-medium uppercase tracking-widest text-accent">Visão geral</p>
             <h2 className="mt-2 text-2xl font-bold text-white">{user.barbershop.name}</h2>

@@ -19,5 +19,9 @@ export function canManageTeam(role: UserProfile["role"]): boolean {
 }
 
 export function canViewTeam(role: UserProfile["role"]): boolean {
-  return role === "owner" || role === "barber";
+  return role === "owner" || role === "barber" || role === "receptionist";
+}
+
+export function canViewOwnProfile(role: UserProfile["role"]): boolean {
+  return role === "barber" || role === "receptionist";
 }

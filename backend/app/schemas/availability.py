@@ -33,3 +33,35 @@ class AvailabilitySlotResponse(BaseModel):
     start_time: time
     end_time: time
     is_active: bool
+
+
+class AvailabilityInterpretRequest(BaseModel):
+    """Mensagem em linguagem natural para interpretação de horários."""
+
+    message: str = Field(min_length=3, max_length=2000)
+
+    @field_validator("message")
+    @classmethod
+    def strip_message(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Mensagem não pode ser vazia.")
+        return stripped
+
+
+class AvailabilityInterpretSlot(BaseModel):
+    """Intervalo interpretado (ainda não persistido)."""
+
+    weekday: int
+    start_time: time
+    end_time: time
+    is_active: bool = True
+
+
+class AvailabilityInterpretResponse(BaseModel):
+    """Resultado da interpretação — requer confirmação antes de salvar."""
+
+    slots: list[AvailabilityInterpretSlot]
+    warnings: list[str]
+    requires_confirmation: bool = True
+    message: str | None = None

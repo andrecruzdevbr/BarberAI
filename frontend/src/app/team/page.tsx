@@ -3,40 +3,33 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { buttonPrimaryClassName, Field, inputClassName } from "@/components/AuthShell";
+import { ScheduleAssistant } from "@/components/ScheduleAssistant";
+import { WhatsAppButton, WhatsAppLink } from "@/components/WhatsAppLink";
 import {
   ApiError,
   createTeamMember,
   deactivateTeamMember,
-  getBarberAvailability,
   getMe,
   getTeamMember,
   listTeam,
-  replaceBarberAvailability,
   updateTeamMember,
-  type AvailabilitySlot,
+  updateTeamMemberSelf,
   type TeamMember,
   type UserProfile,
 } from "@/lib/api";
-import { WEEKDAYS, weekdayLabel } from "@/lib/format";
-import { canManageTeam, canViewTeam, roleLabels } from "@/lib/roles";
+import { canManageTeam, canViewOwnProfile, canViewTeam, roleLabels } from "@/lib/roles";
 
 type MemberForm = {
   name: string;
+  whatsapp: string;
   email: string;
   temporary_password: string;
   role: "barber" | "receptionist";
 };
 
-type SlotDraft = {
-  key: string;
-  weekday: number;
-  start_time: string;
-  end_time: string;
-  is_active: boolean;
-};
-
 const emptyMemberForm: MemberForm = {
   name: "",
+  whatsapp: "",
   email: "",
   temporary_password: "",
   role: "barber",
@@ -48,17 +41,17 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [memberModal, setMemberModal] = useState(false);
+  const [selfModal, setSelfModal] = useState(false);
   const [editing, setEditing] = useState<TeamMember | null>(null);
   const [memberForm, setMemberForm] = useState<MemberForm>(emptyMemberForm);
+  const [selfForm, setSelfForm] = useState({ name: "", whatsapp: "" });
   const [memberFormError, setMemberFormError] = useState<string | null>(null);
   const [savingMember, setSavingMember] = useState(false);
-  const [availabilityBarber, setAvailabilityBarber] = useState<TeamMember | null>(null);
-  const [slots, setSlots] = useState<SlotDraft[]>([]);
-  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
-  const [savingAvailability, setSavingAvailability] = useState(false);
+  const [assistantBarber, setAssistantBarber] = useState<TeamMember | null>(null);
 
   const isOwner = user ? canManageTeam(user.role) : false;
   const canView = user ? canViewTeam(user.role) : false;
+  const isStaff = user ? canViewOwnProfile(user.role) : false;
 
   const loadTeam = useCallback(async (profile: UserProfile) => {
     if (canManageTeam(profile.role)) {
@@ -66,7 +59,7 @@ export default function TeamPage() {
       setMembers(data);
       return;
     }
-    if (profile.role === "barber") {
+    if (canViewOwnProfile(profile.role)) {
       const self = await getTeamMember(profile.id);
       setMembers([self]);
     }
@@ -100,12 +93,19 @@ export default function TeamPage() {
     setEditing(member);
     setMemberForm({
       name: member.name,
+      whatsapp: member.whatsapp ?? "",
       email: member.email,
       temporary_password: "",
       role: member.role === "receptionist" ? "receptionist" : "barber",
     });
     setMemberFormError(null);
     setMemberModal(true);
+  }
+
+  function openSelfEdit(member: TeamMember) {
+    setSelfForm({ name: member.name, whatsapp: member.whatsapp ?? "" });
+    setMemberFormError(null);
+    setSelfModal(true);
   }
 
   async function handleMemberSubmit(e: React.FormEvent) {
@@ -117,11 +117,13 @@ export default function TeamPage() {
       if (editing) {
         await updateTeamMember(editing.id, {
           name: memberForm.name.trim(),
+          whatsapp: memberForm.whatsapp.trim(),
           role: memberForm.role,
         });
       } else {
         await createTeamMember({
           name: memberForm.name.trim(),
+          whatsapp: memberForm.whatsapp.trim(),
           email: memberForm.email.trim(),
           temporary_password: memberForm.temporary_password,
           role: memberForm.role,
@@ -131,6 +133,25 @@ export default function TeamPage() {
       await loadTeam(user);
     } catch (err) {
       setMemberFormError(err instanceof ApiError ? err.message : "Erro ao salvar membro.");
+    } finally {
+      setSavingMember(false);
+    }
+  }
+
+  async function handleSelfSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user) return;
+    setSavingMember(true);
+    setMemberFormError(null);
+    try {
+      await updateTeamMemberSelf({
+        name: selfForm.name.trim(),
+        whatsapp: selfForm.whatsapp.trim(),
+      });
+      setSelfModal(false);
+      await loadTeam(user);
+    } catch (err) {
+      setMemberFormError(err instanceof ApiError ? err.message : "Erro ao salvar perfil.");
     } finally {
       setSavingMember(false);
     }
@@ -147,96 +168,6 @@ export default function TeamPage() {
       await loadTeam(user);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao alterar status.");
-    }
-  }
-
-  async function openAvailability(member: TeamMember) {
-    if (member.role !== "barber") return;
-    setAvailabilityError(null);
-    setAvailabilityBarber(member);
-    try {
-      const data = await getBarberAvailability(member.id);
-      setSlots(
-        data.map((slot, index) => ({
-          key: slot.id ?? `loaded-${index}`,
-          weekday: slot.weekday,
-          start_time: slot.start_time.slice(0, 5),
-          end_time: slot.end_time.slice(0, 5),
-          is_active: slot.is_active,
-        })),
-      );
-    } catch (err) {
-      setAvailabilityError(
-        err instanceof ApiError ? err.message : "Erro ao carregar disponibilidade.",
-      );
-      setSlots([]);
-    }
-  }
-
-  function addSlot(weekday: number) {
-    setSlots((prev) => [
-      ...prev,
-      {
-        key: `new-${Date.now()}-${prev.length}`,
-        weekday,
-        start_time: "09:00",
-        end_time: "18:00",
-        is_active: true,
-      },
-    ]);
-  }
-
-  function removeSlot(key: string) {
-    setSlots((prev) => prev.filter((s) => s.key !== key));
-  }
-
-  function updateSlot(key: string, patch: Partial<SlotDraft>) {
-    setSlots((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)));
-  }
-
-  function validateSlotsLocally(drafts: SlotDraft[]): string | null {
-    for (const slot of drafts) {
-      if (slot.start_time >= slot.end_time) {
-        return `Em ${weekdayLabel(slot.weekday)}, o horário inicial deve ser anterior ao final.`;
-      }
-    }
-    for (const day of WEEKDAYS) {
-      const daySlots = drafts
-        .filter((s) => s.weekday === day.value)
-        .sort((a, b) => a.start_time.localeCompare(b.start_time));
-      for (let i = 0; i < daySlots.length - 1; i += 1) {
-        if (daySlots[i].end_time > daySlots[i + 1].start_time) {
-          return `Horários sobrepostos em ${day.label}.`;
-        }
-      }
-    }
-    return null;
-  }
-
-  async function handleSaveAvailability() {
-    if (!availabilityBarber || !isOwner) return;
-    const localError = validateSlotsLocally(slots);
-    if (localError) {
-      setAvailabilityError(localError);
-      return;
-    }
-    setSavingAvailability(true);
-    setAvailabilityError(null);
-    try {
-      const payload: Omit<AvailabilitySlot, "id">[] = slots.map((s) => ({
-        weekday: s.weekday,
-        start_time: s.start_time,
-        end_time: s.end_time,
-        is_active: s.is_active,
-      }));
-      await replaceBarberAvailability(availabilityBarber.id, payload);
-      setAvailabilityBarber(null);
-    } catch (err) {
-      setAvailabilityError(
-        err instanceof ApiError ? err.message : "Erro ao salvar disponibilidade.",
-      );
-    } finally {
-      setSavingAvailability(false);
     }
   }
 
@@ -279,6 +210,7 @@ export default function TeamPage() {
             <thead className="border-b border-border bg-card text-left text-muted">
               <tr>
                 <th className="px-4 py-3 font-medium">Nome</th>
+                <th className="px-4 py-3 font-medium">WhatsApp</th>
                 <th className="px-4 py-3 font-medium">E-mail</th>
                 <th className="px-4 py-3 font-medium">Função</th>
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -289,7 +221,13 @@ export default function TeamPage() {
               {members.map((member) => (
                 <tr key={member.id} className="border-b border-border/60">
                   <td className="px-4 py-3 font-medium text-white">{member.name}</td>
-                  <td className="px-4 py-3">{member.email}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      <WhatsAppLink phone={member.whatsapp} />
+                      <WhatsAppButton phone={member.whatsapp} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted">{member.email}</td>
                   <td className="px-4 py-3">{roleLabels[member.role]}</td>
                   <td className="px-4 py-3">
                     <span
@@ -322,13 +260,22 @@ export default function TeamPage() {
                           </button>
                         </>
                       )}
+                      {isStaff && user?.id === member.id && (
+                        <button
+                          type="button"
+                          onClick={() => openSelfEdit(member)}
+                          className="text-accent hover:underline"
+                        >
+                          Editar perfil
+                        </button>
+                      )}
                       {member.role === "barber" && (isOwner || user?.id === member.id) && (
                         <button
                           type="button"
-                          onClick={() => openAvailability(member)}
+                          onClick={() => setAssistantBarber(member)}
                           className="text-accent hover:underline"
                         >
-                          Disponibilidade
+                          Assistente de horários
                         </button>
                       )}
                     </div>
@@ -341,166 +288,139 @@ export default function TeamPage() {
       )}
 
       {memberModal && isOwner && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl">
-            <h2 className="mb-4 text-lg font-semibold text-white">
-              {editing ? "Editar membro" : "Novo membro"}
-            </h2>
-            <form onSubmit={handleMemberSubmit} className="space-y-4">
-              <Field label="Nome" id="member_name">
-                <input
-                  id="member_name"
-                  required
-                  value={memberForm.name}
-                  onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })}
-                  className={inputClassName}
-                />
-              </Field>
-              {!editing && (
-                <>
-                  <Field label="E-mail" id="member_email">
-                    <input
-                      id="member_email"
-                      type="email"
-                      required
-                      value={memberForm.email}
-                      onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
-                      className={inputClassName}
-                    />
-                  </Field>
-                  <Field label="Senha temporária" id="member_password">
-                    <input
-                      id="member_password"
-                      type="password"
-                      required
-                      minLength={8}
-                      value={memberForm.temporary_password}
-                      onChange={(e) =>
-                        setMemberForm({ ...memberForm, temporary_password: e.target.value })
-                      }
-                      className={inputClassName}
-                    />
-                  </Field>
-                </>
-              )}
-              <Field label="Função" id="member_role">
-                <select
-                  id="member_role"
-                  value={memberForm.role}
-                  onChange={(e) =>
-                    setMemberForm({
-                      ...memberForm,
-                      role: e.target.value as "barber" | "receptionist",
-                    })
-                  }
-                  className={inputClassName}
-                >
-                  <option value="barber">Barbeiro</option>
-                  <option value="receptionist">Recepcionista</option>
-                </select>
-              </Field>
-              {memberFormError && <p className="text-sm text-red-300">{memberFormError}</p>}
-              <div className="flex gap-2">
-                <button type="submit" disabled={savingMember} className={buttonPrimaryClassName}>
-                  {savingMember ? "Salvando..." : "Salvar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMemberModal(false)}
-                  className="rounded-lg border border-border px-4 py-2.5 text-sm text-slate-200"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <Modal title={editing ? "Editar membro" : "Novo membro"} onClose={() => setMemberModal(false)}>
+          <form onSubmit={handleMemberSubmit} className="space-y-4">
+            <Field label="Nome" id="member_name">
+              <input
+                id="member_name"
+                required
+                value={memberForm.name}
+                onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })}
+                className={inputClassName}
+              />
+            </Field>
+            <Field label="WhatsApp" id="member_whatsapp">
+              <input
+                id="member_whatsapp"
+                required
+                placeholder="(11) 99999-9999"
+                value={memberForm.whatsapp}
+                onChange={(e) => setMemberForm({ ...memberForm, whatsapp: e.target.value })}
+                className={inputClassName}
+              />
+            </Field>
+            {!editing && (
+              <>
+                <Field label="E-mail (login)" id="member_email">
+                  <input
+                    id="member_email"
+                    type="email"
+                    required
+                    value={memberForm.email}
+                    onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
+                    className={inputClassName}
+                  />
+                </Field>
+                <Field label="Senha temporária" id="member_password">
+                  <input
+                    id="member_password"
+                    type="password"
+                    required
+                    minLength={8}
+                    value={memberForm.temporary_password}
+                    onChange={(e) =>
+                      setMemberForm({ ...memberForm, temporary_password: e.target.value })
+                    }
+                    className={inputClassName}
+                  />
+                </Field>
+              </>
+            )}
+            <Field label="Função" id="member_role">
+              <select
+                id="member_role"
+                value={memberForm.role}
+                onChange={(e) =>
+                  setMemberForm({
+                    ...memberForm,
+                    role: e.target.value as "barber" | "receptionist",
+                  })
+                }
+                className={inputClassName}
+              >
+                <option value="barber">Barbeiro</option>
+                <option value="receptionist">Recepcionista</option>
+              </select>
+            </Field>
+            {memberFormError && <p className="text-sm text-red-300">{memberFormError}</p>}
+            <button type="submit" disabled={savingMember} className={buttonPrimaryClassName}>
+              {savingMember ? "Salvando..." : "Salvar"}
+            </button>
+          </form>
+        </Modal>
       )}
 
-      {availabilityBarber && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">
-                Disponibilidade — {availabilityBarber.name}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setAvailabilityBarber(null)}
-                className="text-muted hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
+      {selfModal && isStaff && (
+        <Modal title="Editar meu perfil" onClose={() => setSelfModal(false)}>
+          <form onSubmit={handleSelfSubmit} className="space-y-4">
+            <Field label="Nome" id="self_name">
+              <input
+                id="self_name"
+                required
+                value={selfForm.name}
+                onChange={(e) => setSelfForm({ ...selfForm, name: e.target.value })}
+                className={inputClassName}
+              />
+            </Field>
+            <Field label="WhatsApp" id="self_whatsapp">
+              <input
+                id="self_whatsapp"
+                required
+                value={selfForm.whatsapp}
+                onChange={(e) => setSelfForm({ ...selfForm, whatsapp: e.target.value })}
+                className={inputClassName}
+              />
+            </Field>
+            {memberFormError && <p className="text-sm text-red-300">{memberFormError}</p>}
+            <button type="submit" disabled={savingMember} className={buttonPrimaryClassName}>
+              {savingMember ? "Salvando..." : "Salvar"}
+            </button>
+          </form>
+        </Modal>
+      )}
 
-            {WEEKDAYS.map((day) => {
-              const daySlots = slots.filter((s) => s.weekday === day.value);
-              return (
-                <div key={day.value} className="mb-4 rounded-xl border border-border p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="font-medium text-white">{day.label}</h3>
-                    {isOwner && (
-                      <button
-                        type="button"
-                        onClick={() => addSlot(day.value)}
-                        className="text-sm text-accent hover:underline"
-                      >
-                        + Intervalo
-                      </button>
-                    )}
-                  </div>
-                  {daySlots.length === 0 && (
-                    <p className="text-sm text-muted">Sem horários configurados.</p>
-                  )}
-                  {daySlots.map((slot) => (
-                    <div key={slot.key} className="mb-2 flex flex-wrap items-center gap-2">
-                      <input
-                        type="time"
-                        value={slot.start_time}
-                        disabled={!isOwner}
-                        onChange={(e) => updateSlot(slot.key, { start_time: e.target.value })}
-                        className={`${inputClassName} w-auto`}
-                      />
-                      <span className="text-muted">até</span>
-                      <input
-                        type="time"
-                        value={slot.end_time}
-                        disabled={!isOwner}
-                        onChange={(e) => updateSlot(slot.key, { end_time: e.target.value })}
-                        className={`${inputClassName} w-auto`}
-                      />
-                      {isOwner && (
-                        <button
-                          type="button"
-                          onClick={() => removeSlot(slot.key)}
-                          className="text-sm text-red-300 hover:underline"
-                        >
-                          Remover
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-
-            {availabilityError && (
-              <p className="mb-3 text-sm text-red-300">{availabilityError}</p>
-            )}
-
-            {isOwner && (
-              <button
-                type="button"
-                onClick={handleSaveAvailability}
-                disabled={savingAvailability}
-                className={buttonPrimaryClassName}
-              >
-                {savingAvailability ? "Salvando..." : "Salvar disponibilidade"}
-              </button>
-            )}
-          </div>
-        </div>
+      {assistantBarber && (
+        <ScheduleAssistant
+          barber={assistantBarber}
+          canSave={isOwner || user?.id === assistantBarber.id}
+          onClose={() => setAssistantBarber(null)}
+          onSaved={() => user && loadTeam(user)}
+        />
       )}
     </AppShell>
+  );
+}
+
+function Modal({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-white">{title}</h2>
+          <button type="button" onClick={onClose} className="text-muted hover:text-white">
+            ✕
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
   );
 }

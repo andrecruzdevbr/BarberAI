@@ -44,9 +44,23 @@ export type TeamMember = {
   id: string;
   name: string;
   email: string;
+  whatsapp: string | null;
   role: "owner" | "barber" | "receptionist";
   is_active: boolean;
   created_at: string;
+};
+
+export type BarbershopSettings = {
+  id: string;
+  name: string;
+  whatsapp: string | null;
+};
+
+export type AvailabilityInterpretResult = {
+  slots: AvailabilitySlot[];
+  warnings: string[];
+  requires_confirmation: boolean;
+  message: string | null;
 };
 
 export type AvailabilitySlot = {
@@ -219,6 +233,7 @@ export async function getTeamMember(id: string): Promise<TeamMember> {
 
 export async function createTeamMember(payload: {
   name: string;
+  whatsapp: string;
   email: string;
   temporary_password: string;
   role: "barber" | "receptionist";
@@ -230,11 +245,19 @@ export async function updateTeamMember(
   id: string,
   payload: Partial<{
     name: string;
+    whatsapp: string;
     role: "barber" | "receptionist";
     is_active: boolean;
   }>,
 ): Promise<TeamMember> {
   return apiFetch<TeamMember>(`/team/${id}`, { method: "PUT", body: JSON.stringify(payload) }, true);
+}
+
+export async function updateTeamMemberSelf(payload: Partial<{
+  name: string;
+  whatsapp: string;
+}>): Promise<TeamMember> {
+  return apiFetch<TeamMember>("/team/me", { method: "PUT", body: JSON.stringify(payload) }, true);
 }
 
 export async function deactivateTeamMember(id: string): Promise<TeamMember> {
@@ -252,6 +275,32 @@ export async function replaceBarberAvailability(
   return apiFetch<AvailabilitySlot[]>(
     `/team/${barberId}/availability`,
     { method: "PUT", body: JSON.stringify(slots) },
+    true,
+  );
+}
+
+export async function interpretBarberAvailability(
+  barberId: string,
+  message: string,
+): Promise<AvailabilityInterpretResult> {
+  return apiFetch<AvailabilityInterpretResult>(
+    `/team/${barberId}/availability/interpret`,
+    { method: "POST", body: JSON.stringify({ message }) },
+    true,
+  );
+}
+
+export async function getBarbershopSettings(): Promise<BarbershopSettings> {
+  return apiFetch<BarbershopSettings>("/settings/barbershop", { method: "GET" }, true);
+}
+
+export async function updateBarbershopSettings(payload: Partial<{
+  name: string;
+  whatsapp: string;
+}>): Promise<BarbershopSettings> {
+  return apiFetch<BarbershopSettings>(
+    "/settings/barbershop",
+    { method: "PUT", body: JSON.stringify(payload) },
     true,
   );
 }
