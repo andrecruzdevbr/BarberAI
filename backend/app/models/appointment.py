@@ -72,6 +72,7 @@ class Appointment(Base, TimestampMixin):
         default=AppointmentStatus.SCHEDULED,
     )
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    confirmation_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
     barbershop: Mapped[Barbershop] = relationship(
         "Barbershop",

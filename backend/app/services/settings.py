@@ -7,12 +7,21 @@ from app.models.barbershop import Barbershop
 from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.settings import BarbershopSettingsResponse, BarbershopSettingsUpdate
+from app.services.public_booking import check_booking_readiness
 
 
 def get_barbershop_settings(db: Session, user: User) -> BarbershopSettingsResponse:
     """Retorna configurações da barbearia do usuário autenticado."""
     barbershop = _get_barbershop_or_404(db, user)
-    return BarbershopSettingsResponse.model_validate(barbershop)
+    ready, message = check_booking_readiness(db, barbershop.id)
+    return BarbershopSettingsResponse(
+        id=barbershop.id,
+        name=barbershop.name,
+        slug=barbershop.slug,
+        whatsapp=barbershop.whatsapp,
+        booking_ready=ready,
+        booking_message=message,
+    )
 
 
 def update_barbershop_settings(
@@ -37,7 +46,15 @@ def update_barbershop_settings(
 
     db.commit()
     db.refresh(barbershop)
-    return BarbershopSettingsResponse.model_validate(barbershop)
+    ready, message = check_booking_readiness(db, barbershop.id)
+    return BarbershopSettingsResponse(
+        id=barbershop.id,
+        name=barbershop.name,
+        slug=barbershop.slug,
+        whatsapp=barbershop.whatsapp,
+        booking_ready=ready,
+        booking_message=message,
+    )
 
 
 def _get_barbershop_or_404(db: Session, user: User) -> Barbershop:

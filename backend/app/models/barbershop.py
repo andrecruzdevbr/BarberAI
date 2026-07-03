@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
+from sqlalchemy import Boolean, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,6 +33,7 @@ class Barbershop(Base, TimestampMixin):
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     whatsapp: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
 
     users: Mapped[list[User]] = relationship(
         "User",

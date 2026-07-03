@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_owner
+from app.core.dependencies import get_current_user, require_owner, require_owner_or_receptionist
 from app.models.user import User
 from app.schemas.availability import (
     AvailabilityInterpretRequest,
@@ -29,9 +29,9 @@ router = APIRouter()
 @router.get("", response_model=list[TeamMemberResponse])
 def list_team(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_owner),
+    current_user: User = Depends(require_owner_or_receptionist),
 ) -> list[TeamMemberResponse]:
-    """Lista equipe da barbearia (somente owner)."""
+    """Lista equipe da barbearia (owner e recepcionista)."""
     return team_service.list_team_members(db, current_user)
 
 

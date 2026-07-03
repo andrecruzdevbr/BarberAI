@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 480
 
+    booking_agent_mode: str = "local"
+    booking_agent_api_base_url: str = ""
+    booking_agent_api_key: str = ""
+    booking_agent_model: str = ""
+
+    require_barbershop_whatsapp_for_public_booking: bool = False
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Converte CORS_ORIGINS (string separada por vírgula) em lista."""

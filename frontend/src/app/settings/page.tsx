@@ -23,7 +23,25 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [copied, setCopied] = useState(false);
+
   const isOwner = user?.role === "owner";
+  const publicLink =
+    typeof window !== "undefined" && settings?.slug
+      ? `${window.location.origin}/barbearia/${settings.slug}`
+      : settings?.slug
+        ? `/barbearia/${settings.slug}`
+        : "";
+
+  function copyPublicLink() {
+    if (!publicLink) return;
+    const fullLink =
+      publicLink.startsWith("http") ? publicLink : `${window.location.origin}${publicLink}`;
+    navigator.clipboard.writeText(fullLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   useEffect(() => {
     Promise.all([getMe(), getBarbershopSettings()])
@@ -131,6 +149,36 @@ export default function SettingsPage() {
                 Voltar ao painel
               </Link>
             </p>
+          )}
+
+          {settings && (
+            <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
+              <h2 className="text-lg font-semibold text-white">Agendamento público</h2>
+              <p className="text-sm text-muted">
+                Compartilhe este link no Instagram, QR Code ou WhatsApp para clientes agendarem online.
+              </p>
+              <div className="rounded-lg border border-border bg-background/50 px-3 py-2 text-sm text-slate-200 break-all">
+                {publicLink || `…/barbearia/${settings.slug}`}
+              </div>
+              <button
+                type="button"
+                onClick={copyPublicLink}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-slate-200 hover:border-accent"
+              >
+                {copied ? "Link copiado!" : "Copiar link"}
+              </button>
+              <div
+                className={`rounded-lg px-3 py-2 text-sm ${
+                  settings.booking_ready
+                    ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                    : "border border-amber-500/30 bg-amber-500/10 text-amber-100"
+                }`}
+              >
+                {settings.booking_ready
+                  ? "Agendamento público pronto para receber clientes."
+                  : settings.booking_message ?? "Agendamento público ainda não está disponível."}
+              </div>
+            </div>
           )}
         </div>
       )}

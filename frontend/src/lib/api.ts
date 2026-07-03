@@ -53,7 +53,24 @@ export type TeamMember = {
 export type BarbershopSettings = {
   id: string;
   name: string;
+  slug: string;
   whatsapp: string | null;
+  booking_ready: boolean;
+  booking_message: string | null;
+};
+
+export type Appointment = {
+  id: string;
+  barbershop_id: string;
+  client: { id: string; full_name: string; phone: string };
+  barber: { id: string; name: string };
+  service: { id: string; name: string; duration_minutes: number };
+  starts_at: string;
+  ends_at: string;
+  status: "scheduled" | "completed" | "cancelled" | "no_show";
+  notes: string | null;
+  confirmation_message: string | null;
+  created_at: string;
 };
 
 export type AvailabilityInterpretResult = {
@@ -303,4 +320,40 @@ export async function updateBarbershopSettings(payload: Partial<{
     { method: "PUT", body: JSON.stringify(payload) },
     true,
   );
+}
+
+export async function listAppointments(params?: {
+  date?: string;
+  date_from?: string;
+  date_to?: string;
+  barber_id?: string;
+  status?: string;
+}): Promise<Appointment[]> {
+  const query = new URLSearchParams();
+  if (params?.date) query.set("date", params.date);
+  if (params?.date_from) query.set("date_from", params.date_from);
+  if (params?.date_to) query.set("date_to", params.date_to);
+  if (params?.barber_id) query.set("barber_id", params.barber_id);
+  if (params?.status) query.set("status", params.status);
+  const qs = query.toString();
+  return apiFetch<Appointment[]>(`/appointments${qs ? `?${qs}` : ""}`, { method: "GET" }, true);
+}
+
+export async function createAppointment(payload: {
+  service_id: string;
+  barber_id?: string;
+  starts_at: string;
+  client_name: string;
+  client_whatsapp: string;
+  notes?: string;
+}): Promise<Appointment> {
+  return apiFetch<Appointment>("/appointments", { method: "POST", body: JSON.stringify(payload) }, true);
+}
+
+export async function cancelAppointment(id: string): Promise<Appointment> {
+  return apiFetch<Appointment>(`/appointments/${id}/cancel`, { method: "POST" }, true);
+}
+
+export async function listTeamForAgenda(): Promise<TeamMember[]> {
+  return apiFetch<TeamMember[]>("/team", { method: "GET" }, true);
 }

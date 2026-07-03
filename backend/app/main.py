@@ -6,10 +6,13 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.appointments import router as appointments_router
 from app.api.auth import router as auth_router
 from app.api.clients import router as clients_router
 from app.api.dashboard import router as dashboard_router
 from app.api.health import router as health_router
+from app.api.public import router as public_router
+from app.api.public_home import router as public_home_router
 from app.api.services import router as services_router
 from app.api.settings import router as settings_router
 from app.api.team import router as team_router
@@ -49,6 +52,9 @@ def create_app() -> FastAPI:
     app.include_router(team_router, prefix="/api/v1/team", tags=["team"])
     app.include_router(settings_router, prefix="/api/v1/settings", tags=["settings"])
     app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["dashboard"])
+    app.include_router(appointments_router, prefix="/api/v1/appointments", tags=["appointments"])
+    app.include_router(public_router, prefix="/api/v1/public/barbershops", tags=["public"])
+    app.include_router(public_home_router, prefix="/api/v1/public/booking-agent", tags=["public"])
 
     @app.get("/", tags=["root"])
     def root() -> dict[str, str]:

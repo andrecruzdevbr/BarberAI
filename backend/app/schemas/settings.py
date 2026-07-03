@@ -14,7 +14,10 @@ class BarbershopSettingsResponse(BaseModel):
 
     id: UUID
     name: str
+    slug: str
     whatsapp: str | None
+    booking_ready: bool = False
+    booking_message: str | None = None
 
 
 class BarbershopSettingsUpdate(BaseModel):
