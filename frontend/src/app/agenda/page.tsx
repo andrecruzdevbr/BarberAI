@@ -2,8 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { buttonPrimaryClassName, Field, inputClassName } from "@/components/AuthShell";
+import { Field, Input, Select } from "@/components/ui/Input";
 import { WhatsAppButton, WhatsAppLink } from "@/components/WhatsAppLink";
+import {
+  Alert,
+  Badge,
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  Loading,
+  Modal,
+} from "@/components/ui";
 import {
   ApiError,
   cancelAppointment,
@@ -28,6 +37,8 @@ export default function AgendaPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -74,13 +85,17 @@ export default function AgendaPage() {
       .finally(() => setLoading(false));
   }
 
-  async function handleCancel(id: string) {
-    if (!confirm("Cancelar este agendamento?")) return;
+  async function confirmCancel() {
+    if (!cancelTarget) return;
+    setCancelling(true);
     try {
-      await cancelAppointment(id);
+      await cancelAppointment(cancelTarget.id);
+      setCancelTarget(null);
       await loadAppointments(currentDate);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao cancelar.");
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -120,171 +135,173 @@ export default function AgendaPage() {
     year: "numeric",
   });
 
+  const newAppointmentButton = canCreate ? (
+    <Button size="sm" onClick={() => setModalOpen(true)}>
+      Novo agendamento
+    </Button>
+  ) : null;
+
   return (
-    <AppShell title="Agenda">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => changeDay(-1)}
-            className="rounded-lg border border-border px-3 py-2 text-sm text-slate-200"
-          >
-            ←
-          </button>
-          <span className="min-w-[200px] text-center text-sm font-medium capitalize text-white">
-            {dateLabel}
-          </span>
-          <button
-            type="button"
-            onClick={() => changeDay(1)}
-            className="rounded-lg border border-border px-3 py-2 text-sm text-slate-200"
-          >
-            →
-          </button>
-        </div>
-        {canCreate && (
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            className={`${buttonPrimaryClassName} sm:w-auto`}
-          >
-            Novo agendamento
-          </button>
-        )}
+    <AppShell
+      title="Agenda"
+      description="Horários do dia"
+      action={newAppointmentButton}
+    >
+      <div className="mb-6 flex items-center justify-center gap-2 sm:justify-start">
+        <Button variant="secondary" size="sm" onClick={() => changeDay(-1)} aria-label="Dia anterior">
+          ←
+        </Button>
+        <span className="min-w-0 flex-1 text-center text-sm font-medium capitalize text-white sm:flex-none sm:min-w-[220px]">
+          {dateLabel}
+        </span>
+        <Button variant="secondary" size="sm" onClick={() => changeDay(1)} aria-label="Próximo dia">
+          →
+        </Button>
       </div>
 
-      {loading && <p className="text-muted">Carregando agenda...</p>}
-      {error && (
-        <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {error}
+      {canCreate && (
+        <div className="mb-4 sm:hidden">
+          <Button fullWidth onClick={() => setModalOpen(true)}>
+            Novo agendamento
+          </Button>
         </div>
       )}
 
+      {loading && <Loading label="Carregando agenda..." />}
+      {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+
       {!loading && appointments.length === 0 && (
-        <p className="rounded-xl border border-border bg-card px-4 py-8 text-center text-muted">
-          Nenhum agendamento para este dia.
-        </p>
+        <EmptyState
+          title="Nenhum agendamento neste dia"
+          description="Quando houver horários marcados, eles aparecerão aqui organizados por horário."
+        />
       )}
 
       {!loading && appointments.length > 0 && (
         <div className="space-y-3">
           {appointments.map((appt) => (
-            <div key={appt.id} className="rounded-xl border border-border bg-card p-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="font-medium text-white">{appt.client.full_name}</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
+            <article
+              key={appt.id}
+              className="relative overflow-hidden rounded-2xl border border-border bg-card/80 p-4 pl-5 sm:p-5 sm:pl-6"
+            >
+              <span className="absolute bottom-4 left-0 top-4 w-0.5 rounded-full bg-accent/50" aria-hidden />
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-lg font-semibold text-white">{appt.client.full_name}</p>
+                    <Badge variant={appt.status === "scheduled" ? "accent" : "default"}>
+                      {statusLabels[appt.status] ?? appt.status}
+                    </Badge>
+                  </div>
+                  <p className="text-sm font-medium text-accent">
+                    {formatDateTime(appt.starts_at)}
+                  </p>
+                  <p className="text-sm text-slate-200">
+                    {appt.service.name} · {appt.barber.name}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
                     <WhatsAppLink phone={appt.client.phone} />
                     <WhatsAppButton phone={appt.client.phone} />
                   </div>
-                  <p className="mt-2 text-sm text-slate-200">
-                    {appt.service.name} · {appt.barber.name}
-                  </p>
-                  <p className="text-sm text-muted">{formatDateTime(appt.starts_at)}</p>
                 </div>
-                <div className="flex flex-col items-start gap-2 sm:items-end">
-                  <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent">
-                    {statusLabels[appt.status] ?? appt.status}
-                  </span>
-                  {appt.status === "scheduled" && (
-                    <button
-                      type="button"
-                      onClick={() => handleCancel(appt.id)}
-                      className="text-sm text-red-300 hover:underline"
-                    >
-                      Cancelar
-                    </button>
-                  )}
-                </div>
+                {appt.status === "scheduled" && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    onClick={() => setCancelTarget(appt)}
+                  >
+                    Cancelar
+                  </Button>
+                )}
               </div>
-            </div>
+            </article>
           ))}
         </div>
       )}
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-card p-6">
-            <h2 className="mb-4 text-lg font-semibold text-white">Novo agendamento</h2>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <Field label="Nome do cliente" id="client_name">
-                <input
-                  id="client_name"
+        <Modal title="Novo agendamento" onClose={() => setModalOpen(false)}>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <Field label="Nome do cliente" id="client_name">
+              <Input
+                id="client_name"
+                required
+                value={form.client_name}
+                onChange={(e) => setForm({ ...form, client_name: e.target.value })}
+              />
+            </Field>
+            <Field label="WhatsApp" id="client_whatsapp">
+              <Input
+                id="client_whatsapp"
+                required
+                value={form.client_whatsapp}
+                onChange={(e) => setForm({ ...form, client_whatsapp: e.target.value })}
+              />
+            </Field>
+            <Field label="Serviço" id="service_id">
+              <Select
+                id="service_id"
+                required
+                value={form.service_id}
+                onChange={(e) => setForm({ ...form, service_id: e.target.value })}
+              >
+                <option value="">Selecione...</option>
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.duration_minutes} min)
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            {!isBarber && (
+              <Field label="Barbeiro" id="barber_id">
+                <Select
+                  id="barber_id"
                   required
-                  value={form.client_name}
-                  onChange={(e) => setForm({ ...form, client_name: e.target.value })}
-                  className={inputClassName}
-                />
-              </Field>
-              <Field label="WhatsApp" id="client_whatsapp">
-                <input
-                  id="client_whatsapp"
-                  required
-                  value={form.client_whatsapp}
-                  onChange={(e) => setForm({ ...form, client_whatsapp: e.target.value })}
-                  className={inputClassName}
-                />
-              </Field>
-              <Field label="Serviço" id="service_id">
-                <select
-                  id="service_id"
-                  required
-                  value={form.service_id}
-                  onChange={(e) => setForm({ ...form, service_id: e.target.value })}
-                  className={inputClassName}
+                  value={form.barber_id}
+                  onChange={(e) => setForm({ ...form, barber_id: e.target.value })}
                 >
                   <option value="">Selecione...</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.duration_minutes} min)
+                  {barbers.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
-              {!isBarber && (
-                <Field label="Barbeiro" id="barber_id">
-                  <select
-                    id="barber_id"
-                    required
-                    value={form.barber_id}
-                    onChange={(e) => setForm({ ...form, barber_id: e.target.value })}
-                    className={inputClassName}
-                  >
-                    <option value="">Selecione...</option>
-                    {barbers.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              )}
-              <Field label="Data e horário" id="starts_at">
-                <input
-                  id="starts_at"
-                  type="datetime-local"
-                  required
-                  value={form.starts_at}
-                  onChange={(e) => setForm({ ...form, starts_at: e.target.value })}
-                  className={inputClassName}
-                />
-              </Field>
-              {formError && <p className="text-sm text-red-300">{formError}</p>}
-              <div className="flex gap-2">
-                <button type="submit" disabled={saving} className={buttonPrimaryClassName}>
-                  {saving ? "Salvando..." : "Agendar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="rounded-lg border border-border px-4 py-2.5 text-sm text-slate-200"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            )}
+            <Field label="Data e horário" id="starts_at">
+              <Input
+                id="starts_at"
+                type="datetime-local"
+                required
+                value={form.starts_at}
+                onChange={(e) => setForm({ ...form, starts_at: e.target.value })}
+              />
+            </Field>
+            {formError && <Alert variant="error">{formError}</Alert>}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
+                Voltar
+              </Button>
+              <Button type="submit" disabled={saving} className="sm:flex-1">
+                {saving ? "Salvando..." : "Agendar"}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {cancelTarget && (
+        <ConfirmDialog
+          title="Cancelar agendamento"
+          message={`Deseja cancelar o horário de ${cancelTarget.client.full_name} em ${formatDateTime(cancelTarget.starts_at)}?`}
+          confirmLabel="Sim, cancelar"
+          loading={cancelling}
+          onConfirm={confirmCancel}
+          onCancel={() => setCancelTarget(null)}
+        />
       )}
     </AppShell>
   );

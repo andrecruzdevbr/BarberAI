@@ -3,12 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import {
-  AuthShell,
-  Field,
-  buttonPrimaryClassName,
-  inputClassName,
-} from "@/components/AuthShell";
+import { AuthShell, Field, Input } from "@/components/AuthShell";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { registerBarbershop, ApiError } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 
@@ -59,7 +56,7 @@ export default function RegisterPage() {
       footer={
         <>
           Já tem conta?{" "}
-          <Link href="/login" className="text-accent hover:underline">
+          <Link href="/login" className="font-medium text-accent hover:underline">
             Entrar
           </Link>
         </>
@@ -67,65 +64,39 @@ export default function RegisterPage() {
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="Nome da barbearia" id="barbershop_name">
-          <input
+          <Input
             id="barbershop_name"
             name="barbershop_name"
             required
             minLength={2}
-            className={inputClassName}
             placeholder="Barber Shop Centro"
           />
         </Field>
         <Field label="Nome do dono" id="owner_name">
-          <input
-            id="owner_name"
-            name="owner_name"
-            required
-            minLength={2}
-            className={inputClassName}
-            placeholder="Seu nome completo"
-          />
+          <Input id="owner_name" name="owner_name" required minLength={2} placeholder="Seu nome completo" />
         </Field>
         <Field label="Telefone (opcional)" id="phone">
-          <input
-            id="phone"
-            name="phone"
-            type="tel"
-            className={inputClassName}
-            placeholder="(11) 99999-9999"
-          />
+          <Input id="phone" name="phone" type="tel" placeholder="(11) 99999-9999" />
         </Field>
         <Field label="E-mail" id="email">
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            className={inputClassName}
-            placeholder="dono@email.com"
-          />
+          <Input id="email" name="email" type="email" required placeholder="dono@email.com" />
         </Field>
-        <Field label="Senha" id="password">
-          <input
+        <Field label="Senha" id="password" hint="Mínimo de 8 caracteres">
+          <Input
             id="password"
             name="password"
             type="password"
             required
             minLength={8}
-            className={inputClassName}
-            placeholder="Mínimo 8 caracteres"
+            placeholder="Crie uma senha segura"
           />
         </Field>
 
-        {error && (
-          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-            {error}
-          </p>
-        )}
+        {error && <Alert variant="error">{error}</Alert>}
 
-        <button type="submit" disabled={loading} className={buttonPrimaryClassName}>
+        <Button type="submit" disabled={loading} fullWidth>
           {loading ? "Cadastrando..." : "Criar barbearia"}
-        </button>
+        </Button>
       </form>
     </AuthShell>
   );

@@ -3,12 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import {
-  AuthShell,
-  Field,
-  buttonPrimaryClassName,
-  inputClassName,
-} from "@/components/AuthShell";
+import { AuthShell, Field, Input } from "@/components/AuthShell";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { login, ApiError } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 
@@ -40,11 +37,11 @@ export default function LoginPage() {
   return (
     <AuthShell
       title="Entrar"
-      subtitle="Acesse sua conta BarberAI."
+      subtitle="Acesse o painel da sua barbearia."
       footer={
         <>
           Ainda não tem conta?{" "}
-          <Link href="/register" className="text-accent hover:underline">
+          <Link href="/register" className="font-medium text-accent hover:underline">
             Criar minha barbearia
           </Link>
         </>
@@ -52,35 +49,17 @@ export default function LoginPage() {
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="E-mail" id="email">
-          <input
-            id="email"
-            name="email"
-            type="email"
-            required
-            className={inputClassName}
-            placeholder="dono@email.com"
-          />
+          <Input id="email" name="email" type="email" required placeholder="dono@email.com" />
         </Field>
         <Field label="Senha" id="password">
-          <input
-            id="password"
-            name="password"
-            type="password"
-            required
-            className={inputClassName}
-            placeholder="Sua senha"
-          />
+          <Input id="password" name="password" type="password" required placeholder="Sua senha" />
         </Field>
 
-        {error && (
-          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-            {error}
-          </p>
-        )}
+        {error && <Alert variant="error">{error}</Alert>}
 
-        <button type="submit" disabled={loading} className={buttonPrimaryClassName}>
+        <Button type="submit" disabled={loading} fullWidth>
           {loading ? "Entrando..." : "Entrar"}
-        </button>
+        </Button>
       </form>
     </AuthShell>
   );

@@ -1,21 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   getPublicBarbershop,
   PublicApiError,
   sendBookingAgentMessage,
   sendHomeBookingAgentMessage,
 } from "@/lib/public-api";
+import { ChatSkeleton } from "@/components/ui";
+import { Alert } from "@/components/ui/Alert";
 import { BookingChat, type ChatMessage } from "./BookingChat";
 import { PublicBookingShell } from "./PublicBookingShell";
 
 type BookingAgentProps = {
   slug?: string;
   showOwnerLinks?: boolean;
+  hero?: ReactNode;
 };
 
-export function BookingAgent({ slug, showOwnerLinks = false }: BookingAgentProps) {
+export function BookingAgent({ slug, showOwnerLinks = false, hero }: BookingAgentProps) {
   const [shopName, setShopName] = useState("");
   const [shopWhatsapp, setShopWhatsapp] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | undefined>();
@@ -132,8 +135,9 @@ export function BookingAgent({ slug, showOwnerLinks = false }: BookingAgentProps
         shopName={shopName || undefined}
         shopWhatsapp={shopWhatsapp}
         showOwnerLinks={showOwnerLinks}
+        hero={hero}
       >
-        <p className="text-muted">Abrindo assistente de agendamento...</p>
+        <ChatSkeleton />
       </PublicBookingShell>
     );
   }
@@ -144,8 +148,9 @@ export function BookingAgent({ slug, showOwnerLinks = false }: BookingAgentProps
         shopName={shopName || undefined}
         shopWhatsapp={shopWhatsapp}
         showOwnerLinks={showOwnerLinks}
+        hero={hero}
       >
-        <p className="text-red-300">{error ?? "Barbearia não encontrada."}</p>
+        <Alert variant="error">{error ?? "Barbearia não encontrada."}</Alert>
       </PublicBookingShell>
     );
   }
@@ -155,6 +160,7 @@ export function BookingAgent({ slug, showOwnerLinks = false }: BookingAgentProps
       shopName={shopName || undefined}
       shopWhatsapp={shopWhatsapp}
       showOwnerLinks={showOwnerLinks}
+      hero={hero}
     >
       <BookingChat
         messages={messages}

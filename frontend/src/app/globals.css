@@ -1,13 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0b0f19;
+  --background: #060a12;
   --foreground: #f1f5f9;
-  --card: #111827;
-  --border: #1e293b;
-  --muted: #94a3b8;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
+  --card: #0c1220;
+  --card-elevated: #111827;
+  --border: #1a2332;
+  --border-subtle: #141c28;
+  --muted: #8b9cb3;
+  --accent: #38bdf8;
+  --accent-hover: #0ea5e9;
+  --accent-soft: #7dd3fc;
+  --accent-muted: rgba(56, 189, 248, 0.12);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --surface-glow: rgba(56, 189, 248, 0.06);
+  --ring: rgba(56, 189, 248, 0.35);
 }
 
 @theme inline {
@@ -22,12 +31,84 @@
   --font-mono: var(--font-geist-mono);
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html {
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
 }
 
-input, button {
+input,
+button,
+select,
+textarea {
   font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(56, 189, 248, 0.22);
+}
+
+/* Premium public background */
+.bg-app-gradient {
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -15%, var(--surface-glow), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 100% 0%, rgba(14, 165, 233, 0.04), transparent),
+    var(--background);
+}
+
+/* Home — glow sutil com identidade barbearia */
+.bg-home-barber {
+  background:
+    radial-gradient(ellipse 60% 45% at 15% 25%, rgba(56, 189, 248, 0.06), transparent 50%),
+    radial-gradient(ellipse 50% 40% at 88% 70%, rgba(14, 165, 233, 0.05), transparent 45%),
+    radial-gradient(ellipse 90% 60% at 50% -15%, var(--surface-glow), transparent 55%),
+    var(--background);
+}
+
+/* Subtle admin workspace background */
+.bg-admin {
+  background:
+    radial-gradient(ellipse 70% 50% at 0% 0%, rgba(56, 189, 248, 0.03), transparent),
+    var(--background);
+}
+
+.glass-panel {
+  background: rgba(12, 18, 32, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.chat-surface {
+  background: linear-gradient(180deg, rgba(12, 18, 32, 0.98) 0%, rgba(8, 12, 22, 0.99) 100%);
+  border: 1px solid var(--border);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 24px 48px -12px rgba(0, 0, 0, 0.45);
+}
+
+.safe-bottom {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.text-balance {
+  text-wrap: balance;
 }

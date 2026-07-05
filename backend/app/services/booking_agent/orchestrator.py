@@ -36,7 +36,7 @@ def handle_agent_message(
 
     if data.session_id:
         state = get_session(data.session_id)
-        if state is None or state.slug != slug:
+        if state is None:
             if not is_start:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -47,6 +47,24 @@ def handle_agent_message(
                 slug=slug,
                 barbershop_name=barbershop.name,
             )
+        elif state.slug != slug:
+            if state.barbershop_id is None and (
+                state.booking_intent or state.pending_service_query or state.service_id
+            ):
+                state.slug = slug
+                state.barbershop_id = barbershop.id
+                state.barbershop_name = barbershop.name
+            elif is_start:
+                state = create_session(
+                    barbershop_id=barbershop.id,
+                    slug=slug,
+                    barbershop_name=barbershop.name,
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Sessão expirada. Recarregue a página.",
+                )
     else:
         state = create_session(
             barbershop_id=barbershop.id,

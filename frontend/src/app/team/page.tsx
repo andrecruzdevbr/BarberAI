@@ -2,9 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { buttonPrimaryClassName, Field, inputClassName } from "@/components/AuthShell";
+import { Field, Input, Select } from "@/components/ui/Input";
 import { ScheduleAssistant } from "@/components/ScheduleAssistant";
 import { WhatsAppButton, WhatsAppLink } from "@/components/WhatsAppLink";
+import {
+  Alert,
+  Button,
+  EmptyState,
+  Loading,
+  Modal,
+  StatusBadge,
+} from "@/components/ui";
 import {
   ApiError,
   createTeamMember,
@@ -174,116 +182,79 @@ export default function TeamPage() {
   if (!canView && !loading) {
     return (
       <AppShell title="Equipe">
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-          {error ?? "Permissão insuficiente para acessar a equipe."}
-        </div>
+        <Alert variant="warning">{error ?? "Permissão insuficiente para acessar a equipe."}</Alert>
       </AppShell>
     );
   }
 
+  const headerAction = isOwner ? (
+    <Button size="sm" onClick={openCreateMember}>
+      Novo membro
+    </Button>
+  ) : null;
+
   return (
-    <AppShell title="Equipe">
+    <AppShell title="Equipe" description="Barbeiros e recepcionistas" action={headerAction}>
       {isOwner && (
-        <div className="mb-6 flex justify-end">
-          <button type="button" onClick={openCreateMember} className={`${buttonPrimaryClassName} sm:w-auto`}>
+        <div className="mb-4 sm:hidden">
+          <Button fullWidth onClick={openCreateMember}>
             Novo membro
-          </button>
+          </Button>
         </div>
       )}
 
-      {loading && <p className="text-muted">Carregando equipe...</p>}
-      {error && canView && (
-        <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {error}
-        </div>
-      )}
+      {loading && <Loading label="Carregando equipe..." />}
+      {error && canView && <Alert variant="error" className="mb-4">{error}</Alert>}
 
       {!loading && members.length === 0 && (
-        <p className="rounded-xl border border-border bg-card px-4 py-8 text-center text-muted">
-          Nenhum membro encontrado.
-        </p>
+        <EmptyState title="Nenhum membro encontrado" description="Adicione barbeiros e recepcionistas à equipe." />
       )}
 
       {!loading && members.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="min-w-full text-sm">
-            <thead className="border-b border-border bg-card text-left text-muted">
-              <tr>
-                <th className="px-4 py-3 font-medium">Nome</th>
-                <th className="px-4 py-3 font-medium">WhatsApp</th>
-                <th className="px-4 py-3 font-medium">E-mail</th>
-                <th className="px-4 py-3 font-medium">Função</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((member) => (
-                <tr key={member.id} className="border-b border-border/60">
-                  <td className="px-4 py-3 font-medium text-white">{member.name}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1">
-                      <WhatsAppLink phone={member.whatsapp} />
-                      <WhatsAppButton phone={member.whatsapp} />
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-muted">{member.email}</td>
-                  <td className="px-4 py-3">{roleLabels[member.role]}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
-                        member.is_active
-                          ? "bg-emerald-500/20 text-emerald-300"
-                          : "bg-slate-500/20 text-slate-400"
-                      }`}
-                    >
-                      {member.is_active ? "Ativo" : "Inativo"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      {isOwner && member.role !== "owner" && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => openEditMember(member)}
-                            className="text-accent hover:underline"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleActive(member)}
-                            className="text-red-300 hover:underline"
-                          >
-                            {member.is_active ? "Desativar" : "Ativar"}
-                          </button>
-                        </>
-                      )}
-                      {isStaff && user?.id === member.id && (
-                        <button
-                          type="button"
-                          onClick={() => openSelfEdit(member)}
-                          className="text-accent hover:underline"
-                        >
-                          Editar perfil
-                        </button>
-                      )}
-                      {member.role === "barber" && (isOwner || user?.id === member.id) && (
-                        <button
-                          type="button"
-                          onClick={() => setAssistantBarber(member)}
-                          className="text-accent hover:underline"
-                        >
-                          Assistente de horários
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {members.map((member) => (
+            <article
+              key={member.id}
+              className="flex flex-col rounded-2xl border border-border bg-card p-5"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="truncate font-semibold text-white">{member.name}</h3>
+                  <p className="mt-0.5 text-sm text-muted">{roleLabels[member.role]}</p>
+                </div>
+                <StatusBadge active={member.is_active} />
+              </div>
+              <div className="mt-3 space-y-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <WhatsAppLink phone={member.whatsapp} />
+                  <WhatsAppButton phone={member.whatsapp} />
+                </div>
+                <p className="truncate text-muted">{member.email}</p>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
+                {isOwner && member.role !== "owner" && (
+                  <>
+                    <Button variant="secondary" size="sm" onClick={() => openEditMember(member)}>
+                      Editar
+                    </Button>
+                    <Button variant="danger" size="sm" onClick={() => handleToggleActive(member)}>
+                      {member.is_active ? "Desativar" : "Ativar"}
+                    </Button>
+                  </>
+                )}
+                {isStaff && user?.id === member.id && (
+                  <Button variant="secondary" size="sm" onClick={() => openSelfEdit(member)}>
+                    Editar perfil
+                  </Button>
+                )}
+                {member.role === "barber" && (isOwner || user?.id === member.id) && (
+                  <Button variant="ghost" size="sm" onClick={() => setAssistantBarber(member)}>
+                    Disponibilidade
+                  </Button>
+                )}
+              </div>
+            </article>
+          ))}
         </div>
       )}
 
@@ -291,38 +262,35 @@ export default function TeamPage() {
         <Modal title={editing ? "Editar membro" : "Novo membro"} onClose={() => setMemberModal(false)}>
           <form onSubmit={handleMemberSubmit} className="space-y-4">
             <Field label="Nome" id="member_name">
-              <input
+              <Input
                 id="member_name"
                 required
                 value={memberForm.name}
                 onChange={(e) => setMemberForm({ ...memberForm, name: e.target.value })}
-                className={inputClassName}
               />
             </Field>
             <Field label="WhatsApp" id="member_whatsapp">
-              <input
+              <Input
                 id="member_whatsapp"
                 required
                 placeholder="(11) 99999-9999"
                 value={memberForm.whatsapp}
                 onChange={(e) => setMemberForm({ ...memberForm, whatsapp: e.target.value })}
-                className={inputClassName}
               />
             </Field>
             {!editing && (
               <>
                 <Field label="E-mail (login)" id="member_email">
-                  <input
+                  <Input
                     id="member_email"
                     type="email"
                     required
                     value={memberForm.email}
                     onChange={(e) => setMemberForm({ ...memberForm, email: e.target.value })}
-                    className={inputClassName}
                   />
                 </Field>
                 <Field label="Senha temporária" id="member_password">
-                  <input
+                  <Input
                     id="member_password"
                     type="password"
                     required
@@ -331,13 +299,12 @@ export default function TeamPage() {
                     onChange={(e) =>
                       setMemberForm({ ...memberForm, temporary_password: e.target.value })
                     }
-                    className={inputClassName}
                   />
                 </Field>
               </>
             )}
             <Field label="Função" id="member_role">
-              <select
+              <Select
                 id="member_role"
                 value={memberForm.role}
                 onChange={(e) =>
@@ -346,16 +313,15 @@ export default function TeamPage() {
                     role: e.target.value as "barber" | "receptionist",
                   })
                 }
-                className={inputClassName}
               >
                 <option value="barber">Barbeiro</option>
                 <option value="receptionist">Recepcionista</option>
-              </select>
+              </Select>
             </Field>
-            {memberFormError && <p className="text-sm text-red-300">{memberFormError}</p>}
-            <button type="submit" disabled={savingMember} className={buttonPrimaryClassName}>
+            {memberFormError && <Alert variant="error">{memberFormError}</Alert>}
+            <Button type="submit" disabled={savingMember} fullWidth>
               {savingMember ? "Salvando..." : "Salvar"}
-            </button>
+            </Button>
           </form>
         </Modal>
       )}
@@ -364,27 +330,25 @@ export default function TeamPage() {
         <Modal title="Editar meu perfil" onClose={() => setSelfModal(false)}>
           <form onSubmit={handleSelfSubmit} className="space-y-4">
             <Field label="Nome" id="self_name">
-              <input
+              <Input
                 id="self_name"
                 required
                 value={selfForm.name}
                 onChange={(e) => setSelfForm({ ...selfForm, name: e.target.value })}
-                className={inputClassName}
               />
             </Field>
             <Field label="WhatsApp" id="self_whatsapp">
-              <input
+              <Input
                 id="self_whatsapp"
                 required
                 value={selfForm.whatsapp}
                 onChange={(e) => setSelfForm({ ...selfForm, whatsapp: e.target.value })}
-                className={inputClassName}
               />
             </Field>
-            {memberFormError && <p className="text-sm text-red-300">{memberFormError}</p>}
-            <button type="submit" disabled={savingMember} className={buttonPrimaryClassName}>
+            {memberFormError && <Alert variant="error">{memberFormError}</Alert>}
+            <Button type="submit" disabled={savingMember} fullWidth>
               {savingMember ? "Salvando..." : "Salvar"}
-            </button>
+            </Button>
           </form>
         </Modal>
       )}
@@ -398,29 +362,5 @@ export default function TeamPage() {
         />
       )}
     </AppShell>
-  );
-}
-
-function Modal({
-  title,
-  children,
-  onClose,
-}: {
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">{title}</h2>
-          <button type="button" onClick={onClose} className="text-muted hover:text-white">
-            ✕
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
   );
 }

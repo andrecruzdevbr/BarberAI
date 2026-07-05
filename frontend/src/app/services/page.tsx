@@ -2,7 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { buttonPrimaryClassName, Field, inputClassName } from "@/components/AuthShell";
+import { Field, Input, Textarea, Select } from "@/components/ui/Input";
+import {
+  Alert,
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  Loading,
+  Modal,
+  StatusBadge,
+} from "@/components/ui";
 import {
   ApiError,
   createService,
@@ -36,6 +45,7 @@ export default function ServicesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<Service | null>(null);
   const [editing, setEditing] = useState<Service | null>(null);
   const [form, setForm] = useState<ServiceForm>(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -50,7 +60,8 @@ export default function ServicesPage() {
 
   useEffect(() => {
     getMe()
-      .then(async () => {
+      .then(async (profile) => {
+        setUser(profile);
         await loadServices();
       })
       .catch((err) => {
@@ -58,10 +69,6 @@ export default function ServicesPage() {
       })
       .finally(() => setLoading(false));
   }, [loadServices]);
-
-  useEffect(() => {
-    getMe().then(setUser).catch(() => setUser(null));
-  }, []);
 
   function openCreate() {
     setEditing(null);
@@ -122,166 +129,155 @@ export default function ServicesPage() {
     }
   }
 
-  async function handleDeactivate(service: Service) {
-    if (!confirm(`Desativar o serviço ${service.name}?`)) return;
+  async function confirmDeactivate() {
+    if (!deactivateTarget) return;
     try {
-      await deactivateService(service.id);
+      await deactivateService(deactivateTarget.id);
+      setDeactivateTarget(null);
       await loadServices();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao desativar serviço.");
     }
   }
 
-  return (
-    <AppShell title="Serviços">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted">
-          {canManage ? "Gerencie os serviços oferecidos pela barbearia." : "Visualização dos serviços da barbearia."}
-        </p>
-        {canManage && (
-          <button type="button" onClick={openCreate} className={`${buttonPrimaryClassName} sm:w-auto`}>
-            Novo serviço
-          </button>
-        )}
-      </div>
+  const headerAction = canManage ? (
+    <Button size="sm" onClick={openCreate}>
+      Novo serviço
+    </Button>
+  ) : null;
 
-      {loading && <p className="text-muted">Carregando serviços...</p>}
-      {error && (
-        <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {error}
+  return (
+    <AppShell
+      title="Serviços"
+      description={canManage ? "Gerencie os serviços oferecidos" : "Serviços da barbearia"}
+      action={headerAction}
+    >
+      {canManage && (
+        <div className="mb-4 sm:hidden">
+          <Button fullWidth onClick={openCreate}>
+            Novo serviço
+          </Button>
         </div>
       )}
 
+      {loading && <Loading label="Carregando serviços..." />}
+      {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+
       {!loading && !error && services.length === 0 && (
-        <p className="rounded-xl border border-border bg-card px-4 py-8 text-center text-muted">
-          Nenhum serviço cadastrado.
-        </p>
+        <EmptyState
+          title="Nenhum serviço cadastrado"
+          description="Cadastre os serviços que sua barbearia oferece para liberar o agendamento."
+          action={
+            canManage ? (
+              <Button onClick={openCreate}>Cadastrar primeiro serviço</Button>
+            ) : undefined
+          }
+        />
       )}
 
       {!loading && services.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="min-w-full text-sm">
-            <thead className="border-b border-border bg-card text-left text-muted">
-              <tr>
-                <th className="px-4 py-3 font-medium">Nome</th>
-                <th className="px-4 py-3 font-medium">Descrição</th>
-                <th className="px-4 py-3 font-medium">Duração</th>
-                <th className="px-4 py-3 font-medium">Preço</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                {canManage && <th className="px-4 py-3 font-medium">Ações</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {services.map((service) => (
-                <tr key={service.id} className="border-b border-border/60">
-                  <td className="px-4 py-3 font-medium text-white">{service.name}</td>
-                  <td className="max-w-xs truncate px-4 py-3">{service.description ?? "—"}</td>
-                  <td className="px-4 py-3">{service.duration_minutes} min</td>
-                  <td className="px-4 py-3">{formatBRL(service.price)}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
-                        service.is_active
-                          ? "bg-emerald-500/20 text-emerald-300"
-                          : "bg-slate-500/20 text-slate-400"
-                      }`}
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {services.map((service) => (
+            <article
+              key={service.id}
+              className="flex flex-col rounded-2xl border border-border bg-card p-5"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-semibold text-white">{service.name}</h3>
+                <StatusBadge active={service.is_active} />
+              </div>
+              {service.description && (
+                <p className="mt-2 line-clamp-2 text-sm text-muted">{service.description}</p>
+              )}
+              <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                <span className="text-muted">{service.duration_minutes} min</span>
+                <span className="font-medium text-accent">{formatBRL(service.price)}</span>
+              </div>
+              {canManage && (
+                <div className="mt-4 flex gap-2 border-t border-border pt-4">
+                  <Button variant="secondary" size="sm" onClick={() => openEdit(service)}>
+                    Editar
+                  </Button>
+                  {service.is_active && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => setDeactivateTarget(service)}
                     >
-                      {service.is_active ? "Ativo" : "Inativo"}
-                    </span>
-                  </td>
-                  {canManage && (
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(service)}
-                          className="text-accent hover:underline"
-                        >
-                          Editar
-                        </button>
-                        {service.is_active && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeactivate(service)}
-                            className="text-red-300 hover:underline"
-                          >
-                            Desativar
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                      Desativar
+                    </Button>
                   )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                </div>
+              )}
+            </article>
+          ))}
         </div>
       )}
 
       {modalOpen && canManage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl">
-            <h2 className="mb-4 text-lg font-semibold text-white">
-              {editing ? "Editar serviço" : "Novo serviço"}
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <Field label="Nome" id="name">
-                <input
-                  id="name"
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className={inputClassName}
-                />
-              </Field>
-              <Field label="Descrição (opcional)" id="description">
-                <textarea
-                  id="description"
-                  rows={2}
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className={inputClassName}
-                />
-              </Field>
-              <Field label="Duração (minutos)" id="duration">
-                <input
-                  id="duration"
-                  type="number"
-                  min={10}
-                  required
-                  value={form.duration_minutes}
-                  onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })}
-                  className={inputClassName}
-                />
-              </Field>
-              <Field label="Preço (R$)" id="price">
-                <input
-                  id="price"
-                  type="number"
-                  min={0.01}
-                  step={0.01}
-                  required
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
-                  className={inputClassName}
-                />
-              </Field>
-              {formError && <p className="text-sm text-red-300">{formError}</p>}
-              <div className="flex gap-2">
-                <button type="submit" disabled={saving} className={buttonPrimaryClassName}>
-                  {saving ? "Salvando..." : "Salvar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="rounded-lg border border-border px-4 py-2.5 text-sm text-slate-200"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <Modal
+          title={editing ? "Editar serviço" : "Novo serviço"}
+          onClose={() => setModalOpen(false)}
+        >
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Field label="Nome" id="name">
+              <Input
+                id="name"
+                required
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </Field>
+            <Field label="Descrição (opcional)" id="description">
+              <Textarea
+                id="description"
+                rows={2}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </Field>
+            <Field label="Duração (minutos)" id="duration">
+              <Input
+                id="duration"
+                type="number"
+                min={10}
+                required
+                value={form.duration_minutes}
+                onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })}
+              />
+            </Field>
+            <Field label="Preço (R$)" id="price">
+              <Input
+                id="price"
+                type="number"
+                min={0.01}
+                step={0.01}
+                required
+                value={form.price}
+                onChange={(e) => setForm({ ...form, price: e.target.value })}
+              />
+            </Field>
+            {formError && <Alert variant="error">{formError}</Alert>}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={saving} className="sm:flex-1">
+                {saving ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {deactivateTarget && (
+        <ConfirmDialog
+          title="Desativar serviço"
+          message={`Deseja desativar "${deactivateTarget.name}"? Ele deixará de aparecer no agendamento.`}
+          confirmLabel="Desativar"
+          onConfirm={confirmDeactivate}
+          onCancel={() => setDeactivateTarget(null)}
+        />
       )}
     </AppShell>
   );

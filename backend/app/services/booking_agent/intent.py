@@ -85,7 +85,10 @@ def _extract_time_prefs(text: str, intent: DetectedIntent) -> None:
             intent.weekday = weekday
             break
 
-    if _has_any(text, ("manha", "de manha")):
+    if _has_any(text, ("de manha", "a manha", "pela manha")):
+        intent.period = "morning"
+        intent.before_hour = 12
+    elif re.search(r"(?<![a-z])manha(?![a-z])", text):
         intent.period = "morning"
         intent.before_hour = 12
     elif _has_any(text, ("tarde", "a tarde", "de tarde")):
@@ -229,6 +232,12 @@ def detect_home_intent(message: str, shop_choices: list[dict[str, Any]] | None =
             return DetectedIntent(name="search_again")
         return DetectedIntent(name="unknown")
 
+    from app.services.booking_agent.context import has_booking_signals, parse_message
+
+    parsed = parse_message(message)
+    if has_booking_signals(parsed):
+        return DetectedIntent(name="booking_context")
+
     if message in ("", "__start__"):
         return DetectedIntent(name="greeting")
 
@@ -268,6 +277,11 @@ def detect_home_intent(message: str, shop_choices: list[dict[str, Any]] | None =
     if explicit_name:
         return DetectedIntent(name="search_barbershop", shop_query=explicit_name)
 
+    if shops and _has_any(text, ("quero agendar", "vamos agendar", "continuar", "comecar agendamento")):
+        if len(shops) == 1:
+            return DetectedIntent(name="select_barbershop", entities={"index": 0})
+        return DetectedIntent(name="list_barbershops")
+
     if _has_any(
         text,
         (
@@ -280,7 +294,6 @@ def detect_home_intent(message: str, shop_choices: list[dict[str, Any]] | None =
             "ver barbearias",
             "ver opcoes",
             "opcoes de barbearia",
-            "quero agendar",
             "agendar",
             "marcar horario",
         ),
@@ -358,14 +371,22 @@ def detect_shop_intent(
             return DetectedIntent(name="confirm_booking")
         if _has_any(text, ("cancelar", "cancela", "desistir", "esquece")):
             return DetectedIntent(name="cancel_flow")
-        if _has_any(text, ("alterar servico", "mudar servico", "trocar servico", "outro servico")):
+        if _has_any(text, ("alterar servico", "mudar servico", "trocar servico", "outro servico", "trocar de servico")):
             return DetectedIntent(name="change_service_menu")
         if _has_any(text, ("alterar barbeiro", "mudar barbeiro", "trocar barbeiro", "outro barbeiro")):
             return DetectedIntent(name="change_barber_menu")
-        if _has_any(text, ("alterar horario", "mudar horario", "outro horario", "trocar horario")):
-            intent = DetectedIntent(name="ask_availability")
-            _extract_time_prefs(text, intent)
-            return intent
+        if _has_any(
+            text,
+            (
+                "alterar horario",
+                "mudar horario",
+                "outro horario",
+                "trocar horario",
+                "mudar o horario",
+                "trocar de horario",
+            ),
+        ):
+            return DetectedIntent(name="change_slot_menu")
         service_res = resolve_service_request(text, services)
         if service_res is not None:
             if service_res.name == "select_service":
@@ -409,10 +430,25 @@ def detect_shop_intent(
     if _has_any(text, ("barbeiros", "quais barbeiros", "quem atende", "equipe")):
         return DetectedIntent(name="list_barbers")
 
-    if _has_any(text, ("alterar servico", "mudar servico", "trocar servico")):
+    if _has_any(text, ("alterar servico", "mudar servico", "trocar servico", "trocar de servico")):
         return DetectedIntent(name="change_service_menu")
 
-    if _has_any(text, ("alterar barbeiro", "mudar barbeiro", "trocar barbeiro")):
+    if _has_any(
+        text,
+        (
+            "alterar horario",
+            "mudar horario",
+            "trocar horario",
+            "mudar o horario",
+            "trocar de horario",
+        ),
+    ):
+        return DetectedIntent(name="change_slot_menu")
+
+    if _has_any(
+        text,
+        ("alterar barbeiro", "mudar barbeiro", "trocar barbeiro", "trocar de barbeiro"),
+    ):
         return DetectedIntent(name="change_barber_menu")
 
     if _has_any(text, ("proxima semana", "semana que vem", "semana seguinte")):

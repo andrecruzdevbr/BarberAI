@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
-import { buttonPrimaryClassName, Field, inputClassName } from "@/components/AuthShell";
+import { Field, Input } from "@/components/ui/Input";
 import { WhatsAppLink } from "@/components/WhatsAppLink";
+import { Alert, Button, Card, Loading, SectionHeader } from "@/components/ui";
 import {
   ApiError,
   getBarbershopSettings,
@@ -22,7 +23,6 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
   const [copied, setCopied] = useState(false);
 
   const isOwner = user?.role === "owner";
@@ -39,7 +39,7 @@ export default function SettingsPage() {
       publicLink.startsWith("http") ? publicLink : `${window.location.origin}${publicLink}`;
     navigator.clipboard.writeText(fullLink).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 2500);
     });
   }
 
@@ -80,105 +80,97 @@ export default function SettingsPage() {
   }
 
   return (
-    <AppShell title="Configurações">
-      {loading && <p className="text-muted">Carregando...</p>}
+    <AppShell title="Configurações" description="Dados da barbearia e link público">
+      {loading && <Loading label="Carregando configurações..." />}
 
       {!loading && !isOwner && (
-        <div className="space-y-4">
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <div className="mx-auto max-w-lg space-y-4">
+          <Alert variant="warning">
             Somente o dono da barbearia pode alterar estas configurações.
-          </div>
+          </Alert>
           {settings && (
-            <div className="rounded-xl border border-border bg-card p-5 text-sm">
-              <p className="text-muted">Barbearia</p>
-              <p className="mt-1 font-medium text-white">{settings.name}</p>
+            <Card>
+              <p className="text-sm text-muted">Barbearia</p>
+              <p className="mt-1 font-semibold text-white">{settings.name}</p>
               {settings.whatsapp && (
-                <p className="mt-3">
+                <p className="mt-3 text-sm">
                   <span className="text-muted">WhatsApp: </span>
                   <WhatsAppLink phone={settings.whatsapp} />
                 </p>
               )}
-            </div>
+            </Card>
           )}
         </div>
       )}
 
       {!loading && isOwner && (
-        <div className="mx-auto max-w-lg space-y-6">
-          <p className="text-sm text-muted">
-            Esse número será usado futuramente para enviar confirmações e lembretes de agendamento.
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-border bg-card p-6">
-            <Field label="Nome da barbearia" id="shop_name">
-              <input
-                id="shop_name"
-                required
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className={inputClassName}
-              />
-            </Field>
-            <Field label="WhatsApp oficial da barbearia" id="shop_whatsapp">
-              <input
+        <div className="mx-auto max-w-2xl space-y-6">
+          <Card padding="lg">
+            <SectionHeader
+              title="Dados da barbearia"
+              description="Informações exibidas no agendamento e no painel."
+            />
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <Field label="Nome da barbearia" id="shop_name">
+                <Input
+                  id="shop_name"
+                  required
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </Field>
+              <Field
+                label="WhatsApp oficial"
                 id="shop_whatsapp"
-                required
-                placeholder="(11) 99999-9999"
-                value={form.whatsapp}
-                onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                className={inputClassName}
-              />
-            </Field>
+                hint="Opcional por enquanto. Será usado futuramente para confirmações automáticas."
+              >
+                <Input
+                  id="shop_whatsapp"
+                  placeholder="(11) 99999-9999"
+                  value={form.whatsapp}
+                  onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+                />
+              </Field>
 
-            {error && (
-              <p className="text-sm text-red-300">{error}</p>
-            )}
-            {success && (
-              <p className="text-sm text-emerald-300">{success}</p>
-            )}
+              {error && <Alert variant="error">{error}</Alert>}
+              {success && <Alert variant="success">{success}</Alert>}
 
-            <button type="submit" disabled={saving} className={buttonPrimaryClassName}>
-              {saving ? "Salvando..." : "Salvar configurações"}
-            </button>
-          </form>
-
-          {!settings?.whatsapp && (
-            <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-              Configure o WhatsApp da barbearia antes de ativar o agendamento público.{" "}
-              <Link href="/dashboard" className="underline">
-                Voltar ao painel
-              </Link>
-            </p>
-          )}
+              <Button type="submit" disabled={saving}>
+                {saving ? "Salvando..." : "Salvar configurações"}
+              </Button>
+            </form>
+          </Card>
 
           {settings && (
-            <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
-              <h2 className="text-lg font-semibold text-white">Agendamento público</h2>
-              <p className="text-sm text-muted">
-                Compartilhe este link no Instagram, QR Code ou WhatsApp para clientes agendarem online.
-              </p>
-              <div className="rounded-lg border border-border bg-background/50 px-3 py-2 text-sm text-slate-200 break-all">
+            <Card padding="lg">
+              <SectionHeader
+                title="Agendamento público"
+                description="Compartilhe este link no Instagram, QR Code ou WhatsApp para clientes agendarem online."
+              />
+              <div className="rounded-xl border border-border bg-background/50 px-4 py-3 text-sm text-slate-200 break-all">
                 {publicLink || `…/barbearia/${settings.slug}`}
               </div>
-              <button
-                type="button"
-                onClick={copyPublicLink}
-                className="rounded-lg border border-border px-4 py-2 text-sm text-slate-200 hover:border-accent"
-              >
-                {copied ? "Link copiado!" : "Copiar link"}
-              </button>
-              <div
-                className={`rounded-lg px-3 py-2 text-sm ${
-                  settings.booking_ready
-                    ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                    : "border border-amber-500/30 bg-amber-500/10 text-amber-100"
-                }`}
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <Button variant="secondary" onClick={copyPublicLink}>
+                  {copied ? "Link copiado!" : "Copiar link"}
+                </Button>
+                {publicLink && (
+                  <Link href={`/barbearia/${settings.slug}`} target="_blank" className="sm:flex-1">
+                    <Button variant="ghost" fullWidth>
+                      Abrir página pública
+                    </Button>
+                  </Link>
+                )}
+              </div>
+              <Alert
+                variant={settings.booking_ready ? "success" : "warning"}
+                className="mt-4"
               >
                 {settings.booking_ready
                   ? "Agendamento público pronto para receber clientes."
                   : settings.booking_message ?? "Agendamento público ainda não está disponível."}
-              </div>
-            </div>
+              </Alert>
+            </Card>
           )}
         </div>
       )}

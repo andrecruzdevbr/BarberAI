@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
+import { Alert, Card, SkeletonCard, StatCard } from "@/components/ui";
 import {
   getBarbershopSettings,
   getDashboardSummary,
@@ -38,55 +39,54 @@ export default function DashboardPage() {
     user?.role === "owner" && settings && !settings.whatsapp;
 
   return (
-    <AppShell title="Dashboard">
-      {loading && <p className="text-muted">Carregando dados...</p>}
-
-      {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {error}
+    <AppShell
+      title="Dashboard"
+      description="Visão geral da sua barbearia"
+    >
+      {loading && (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       )}
+
+      {error && <Alert variant="error">{error}</Alert>}
 
       {!loading && !error && user && summary && (
         <div className="space-y-6">
           {showWhatsAppWarning && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-              Configure o WhatsApp da barbearia antes de ativar o agendamento público.{" "}
+            <Alert variant="warning">
+              Configure o WhatsApp da barbearia para futuras confirmações automáticas.{" "}
               <Link href="/settings" className="font-medium underline">
                 Ir para configurações
               </Link>
-            </div>
+            </Alert>
           )}
 
-          <div className="rounded-2xl border border-border bg-card p-6">
-            <p className="text-sm font-medium uppercase tracking-widest text-accent">Visão geral</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">{user.barbershop.name}</h2>
-            <p className="mt-1 text-muted">
+          <Card padding="lg" elevated className="border-accent/10">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">
+              Visão geral
+            </p>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">{user.barbershop.name}</h2>
+            <p className="mt-1.5 text-sm text-muted">
               Olá, {user.name} — {roleLabels[user.role]}
             </p>
-          </div>
+          </Card>
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard label="Clientes ativos" value={summary.active_clients} />
             <StatCard label="Serviços ativos" value={summary.active_services} />
             <StatCard label="Barbeiros ativos" value={summary.active_barbers} />
-            <StatCard label="Recepcionistas ativos" value={summary.active_receptionists} />
+            <StatCard label="Recepcionistas" value={summary.active_receptionists} />
           </div>
 
-          <p className="rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-slate-200">
-            Dados reais da sua barbearia. Agenda e faturamento serão exibidos nas próximas etapas.
-          </p>
+          <Alert variant="info">
+            Dados reais da sua barbearia. Use a agenda para gerenciar horários do dia.
+          </Alert>
         </div>
       )}
     </AppShell>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-5">
-      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
-      <p className="mt-2 text-3xl font-bold text-white">{value}</p>
-    </div>
   );
 }

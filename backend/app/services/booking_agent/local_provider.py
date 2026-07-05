@@ -18,7 +18,14 @@ from app.schemas.booking_agent import (
     BookingSummary,
 )
 from app.services.booking_agent import tools
-from app.services.booking_agent.intent import DetectedIntent, detect_shop_intent
+from app.services.booking_agent.context import (
+    apply_parsed_to_state,
+    describe_noted_context,
+    describe_service_period,
+    parse_message,
+    sync_legacy_fields,
+)
+from app.services.booking_agent.intent import DetectedIntent, detect_shop_intent, resolve_service_request
 from app.services.booking_agent.provider import BookingAgentProvider
 from app.services.booking_agent.session import BookingSessionState, SlotSelection
 from app.services.public_booking import INCOMPLETE_BOOKING_MESSAGE, check_booking_readiness
@@ -61,6 +68,11 @@ class LocalBookingAgentProvider(BookingAgentProvider):
 
         if not ready:
             return self._handle_incomplete(barbershop, state, message)
+
+        if message not in ("", "__start__") and not message.startswith("action:"):
+            parsed = parse_message(message, services=state.services, barbers=state.barbers)
+            apply_parsed_to_state(state, parsed)
+            sync_legacy_fields(state)
 
         intent = detect_shop_intent(
             message,
@@ -112,7 +124,7 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         message: str,
     ) -> BookingAgentResponse:
         handlers = {
-            "greeting": lambda: self._welcome(db, state),
+            "greeting": lambda: self._welcome(db, state, message),
             "help": lambda: self._help(state),
             "list_services": lambda: self._list_services(state),
             "ask_service_price": lambda: self._list_prices(state, intent),
@@ -136,6 +148,7 @@ class LocalBookingAgentProvider(BookingAgentProvider):
             ),
             "change_service_menu": lambda: self._change_service_menu(state),
             "change_barber_menu": lambda: self._change_barber_menu(state),
+            "change_slot_menu": lambda: self._change_slot_menu(db, state),
             "keep_appointment": lambda: self._keep_appointment(state),
             "confirm_context_help": lambda: self._confirm_context_help(state),
             "cancel_flow": lambda: self._cancel_flow(db, state),
@@ -146,14 +159,178 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         handler = handlers.get(intent.name, lambda: self._unknown(state))
         return handler()
 
-    def _welcome(self, db: Session, state: BookingSessionState) -> BookingAgentResponse:
+    def continue_after_shop_select(
+        self,
+        db: Session,
+        barbershop: Barbershop,
+        state: BookingSessionState,
+    ) -> BookingAgentResponse:
+        """Continua o agendamento após escolha da barbearia na home, preservando contexto."""
         self._ensure_catalog(db, state)
+        state.has_greeted = True
+        state.booking_intent = state.booking_intent or "book"
+
+        if state.pending_service_query and not state.service_id:
+            query_text = state.pending_service_query
+            service_res = resolve_service_request(query_text, state.services)
+            if service_res is not None:
+                if service_res.name == "select_service":
+                    index = service_res.entities.get("service_index")
+                    if index is not None:
+                        return self._select_service(db, state, index)
+                if service_res.name == "service_not_available":
+                    return self._service_not_available(
+                        state,
+                        service_res.entities.get("requested_label"),
+                        lead=self._shop_select_lead(state),
+                    )
+                if service_res.name == "service_ambiguous":
+                    return self._service_ambiguous(
+                        state,
+                        service_res.entities.get("service_indices", []),
+                    )
+
+        noted = describe_noted_context(state)
+        lead = self._shop_select_lead(state)
+        if noted and not lead.startswith("Perfeito"):
+            lead = f"Perfeito. {noted}."
+        return self._continue_conversation(db, state, lead=lead)
+
+    def _shop_select_lead(self, state: BookingSessionState) -> str:
+        service_period = describe_service_period(state)
+        if state.pending_service_query and not state.service_id:
+            return (
+                f"Perfeito. Já anotei que você quer {service_period}.\n\n"
+                f"Agora estamos na {state.barbershop_name}."
+            )
+        if state.service_id:
+            return (
+                f"Perfeito. Já anotei que você quer {service_period}.\n\n"
+                f"Agora estamos na {state.barbershop_name}."
+            )
+        return f"Perfeito. Vamos agendar na {state.barbershop_name}."
+
+    def _continue_conversation(
+        self,
+        db: Session,
+        state: BookingSessionState,
+        *,
+        lead: str | None = None,
+    ) -> BookingAgentResponse:
+        """Avança para a próxima informação faltante sem sequência fixa."""
+        sync_legacy_fields(state)
+
+        if state.pending_service_query and not state.service_id:
+            service_res = resolve_service_request(state.pending_service_query, state.services)
+            if service_res is not None and service_res.name == "select_service":
+                index = service_res.entities.get("service_index")
+                if index is not None:
+                    response = self._select_service(db, state, index)
+                    if lead:
+                        response.assistant_message = f"{lead}\n\n{response.assistant_message}"
+                    return response
+            if service_res is not None and service_res.name == "service_not_available":
+                return self._service_not_available(
+                    state,
+                    service_res.entities.get("requested_label"),
+                    lead=lead,
+                )
+
+        if state.service_id is None:
+            prefix = f"{lead}\n\n" if lead else ""
+            return BookingAgentResponse(
+                session_id=state.session_id,
+                assistant_message=f"{prefix}Qual serviço você deseja?",
+                step="choose_service",
+                choices=self._service_choices(state),
+                booking_summary=self._summary(state),
+            )
+
+        if state.barber_id is None and not state.barber_any:
+            prefix = f"{lead}\n\n" if lead else ""
+            return self._barber_prompt(state, prefix=prefix)
+
+        if self._has_prefs(state):
+            intro = f"{lead}\n\n{self._slot_search_intro(state)}" if lead else self._slot_search_intro(state)
+            return self._show_filtered_slots(db, state, intro=intro)
+
+        if state.barber_id or state.barber_any:
+            prefix = f"{lead}\n\n" if lead else ""
+            response = self._period_prompt(state)
+            if prefix:
+                response.assistant_message = f"{prefix}{response.assistant_message}"
+            return response
+
+        return self._barber_prompt(state, prefix=f"{lead}\n\n" if lead else "")
+
+    def _slot_search_intro(self, state: BookingSessionState) -> str:
+        period = ""
+        if state.requested_period == "afternoon" or (
+            state.pref_after_hour is not None and state.pref_after_hour >= 12
+        ):
+            period = " à tarde"
+        elif state.requested_period == "morning":
+            period = " de manhã"
+        elif state.requested_period == "evening":
+            period = " à noite"
+        elif state.pref_after_hour is not None:
+            period = f" depois das {state.pref_after_hour}h"
+
+        if state.barber_any:
+            return f"Perfeito. Vou procurar horários{period} com qualquer barbeiro disponível."
+        if state.barber_name:
+            return f"Perfeito. Vou procurar horários{period} com {state.barber_name}."
+        return "Perfeito. Vou procurar horários que combinem com você."
+
+    def _welcome(
+        self,
+        db: Session,
+        state: BookingSessionState,
+        message: str = "",
+    ) -> BookingAgentResponse:
+        self._ensure_catalog(db, state)
+
+        if message not in ("", "__start__") and not message.startswith("action:"):
+            parsed = parse_message(message, services=state.services, barbers=state.barbers)
+            if parsed.service_intent or parsed.pending_service_label or parsed.barber_index is not None:
+                apply_parsed_to_state(state, parsed)
+                state.booking_intent = state.booking_intent or "book"
+                sync_legacy_fields(state)
+                state.has_greeted = True
+                return self._continue_conversation(db, state)
+
+        if state.has_greeted and (
+            state.service_id or state.pending_service_query or state.barber_id or state.barber_any
+        ):
+            return self._continue_conversation(
+                db,
+                state,
+                lead="Claro, vamos continuar.",
+            )
+
+        if state.has_greeted:
+            return BookingAgentResponse(
+                session_id=state.session_id,
+                assistant_message="Oi! Como posso te ajudar com o agendamento?",
+                step=state.step or "choose_service",
+                choices=self._service_choices(state),
+                booking_summary=self._summary(state),
+            )
+
+        state.has_greeted = True
+        if state.pending_service_query or state.service_id or self._has_prefs(state):
+            return self._continue_conversation(
+                db,
+                state,
+                lead=f"Olá! Sou a assistente da {state.barbershop_name}.",
+            )
+
         state.step = "choose_service"
         return BookingAgentResponse(
             session_id=state.session_id,
             assistant_message=(
                 f"Olá, eu sou a assistente da {state.barbershop_name}.\n\n"
-                "Vou te ajudar a encontrar um horário disponível.\n\n"
+                "Vou te ajudar a encontrar um horário.\n\n"
                 "Qual serviço você deseja?"
             ),
             step=state.step,
@@ -165,9 +342,11 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         return BookingAgentResponse(
             session_id=state.session_id,
             assistant_message=(
-                "Posso ajudar a encontrar um horário, mostrar serviços, preços, "
-                "barbeiros ou o WhatsApp da barbearia.\n\n"
-                'Por exemplo: "Quero cabelo amanhã à tarde".'
+                "Posso ajudar você a escolher serviço, barbeiro e horário.\n\n"
+                "Por exemplo:\n"
+                "“Quero cabelo amanhã à tarde”\n"
+                "“Tem horário sábado?”\n"
+                "“Quero o primeiro horário disponível”"
             ),
             step=state.step or "choose_service",
             choices=self._service_choices(state),
@@ -175,12 +354,17 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         )
 
     def _unknown(self, state: BookingSessionState) -> BookingAgentResponse:
+        noted = describe_noted_context(state)
+        prefix = f"{noted.capitalize()}.\n\n" if noted else ""
         return BookingAgentResponse(
             session_id=state.session_id,
             assistant_message=(
-                "Posso ajudar a encontrar um horário, mostrar serviços, preços, "
-                "barbeiros ou falar com a barbearia.\n\n"
-                'Por exemplo: "Quero cabelo amanhã à tarde".'
+                f"{prefix}"
+                "Posso ajudar você a escolher serviço, barbeiro e horário.\n\n"
+                "Por exemplo:\n"
+                "“Quero cabelo amanhã à tarde”\n"
+                "“Tem horário sábado?”\n"
+                "“Quero o primeiro horário disponível”"
             ),
             step=state.step or "choose_service",
             choices=self._service_choices(state),
@@ -217,9 +401,9 @@ class LocalBookingAgentProvider(BookingAgentProvider):
             return BookingAgentResponse(
                 session_id=state.session_id,
                 assistant_message=(
-                    f"{service['name']} custa R$ {service['price']} "
+                    f"{service['name']} custa {_format_price(str(service['price']))} "
                     f"e dura cerca de {service['duration_minutes']} minutos.\n\n"
-                    "Quer agendar esse serviço?"
+                    "Quer continuar com o agendamento?"
                 ),
                 step=state.step or "choose_service",
                 choices=[BookingAgentChoice(label=service["name"], action=f"svc:{index}")],
@@ -264,6 +448,8 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         service = state.services[index]
         state.service_id = service["id"]
         state.service_name = service["name"]
+        state.resolved_service_id = service["id"]
+        state.pending_service_query = None
         state.selected_slot = None
         if not state.barbers:
             state.barbers = tools.list_active_barbers(db, state.slug)
@@ -278,18 +464,25 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         state.step = "choose_barber"
         return self._barber_prompt(state)
 
-    def _barber_prompt(self, state: BookingSessionState) -> BookingAgentResponse:
+    def _barber_prompt(self, state: BookingSessionState, *, prefix: str = "") -> BookingAgentResponse:
         choices = [
             BookingAgentChoice(label=b["name"], action=f"barber:{i}")
             for i, b in enumerate(state.barbers)
         ]
         choices.append(BookingAgentChoice(label="Primeiro disponível", action="barber:any"))
+        noted = describe_service_period(state)
+        body = (
+            f"Perfeito. Você quer {noted}.\n\n"
+            "Prefere algum barbeiro específico ou quer o primeiro horário disponível?"
+            if noted and noted != "seu serviço"
+            else (
+                "Prefere algum barbeiro específico ou quer o primeiro horário disponível?"
+            )
+        )
+        state.step = "choose_barber"
         return BookingAgentResponse(
             session_id=state.session_id,
-            assistant_message=(
-                "Boa escolha.\n\n"
-                "Você prefere algum barbeiro específico ou quer o primeiro horário disponível?"
-            ),
+            assistant_message=f"{prefix}{body}",
             step="choose_barber",
             choices=choices,
             booking_summary=self._summary(state),
@@ -326,10 +519,14 @@ class LocalBookingAgentProvider(BookingAgentProvider):
             )
         state.barber_any = True
         state.barber_id = None
-        state.barber_name = "Primeiro horário disponível"
+        state.barber_name = "Qualquer barbeiro disponível"
+        state.resolved_barber_id = None
+        state.pending_barber_query = "qualquer barbeiro"
         state.selected_slot = None
-        self._clear_prefs(state)
-        return self._show_filtered_slots(db, state)
+        if self._has_prefs(state):
+            intro = self._slot_search_intro(state)
+            return self._show_filtered_slots(db, state, intro=intro)
+        return self._period_prompt(state)
 
     def _select_barber(
         self,
@@ -343,13 +540,15 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         state.barber_any = False
         state.barber_id = barber["id"]
         state.barber_name = barber["name"]
+        state.resolved_barber_id = barber["id"]
+        state.pending_barber_query = barber["name"]
         state.selected_slot = None
 
         if state.service_id is None:
             return BookingAgentResponse(
                 session_id=state.session_id,
                 assistant_message=(
-                    f"Combinado, será com {barber['name']}.\n\n"
+                    f"Perfeito. Vou procurar horários com {barber['name']}.\n\n"
                     "Qual serviço você deseja?"
                 ),
                 step="choose_service",
@@ -407,9 +606,10 @@ class LocalBookingAgentProvider(BookingAgentProvider):
 
         if state.barber_id is None and not state.barber_any:
             state.barber_any = True
-            state.barber_name = "Primeiro horário disponível"
+            state.barber_name = "Qualquer barbeiro disponível"
 
-        return self._show_filtered_slots(db, state)
+        intro = self._slot_search_intro(state)
+        return self._show_filtered_slots(db, state, intro=intro)
 
     def _has_prefs(self, state: BookingSessionState) -> bool:
         return any(
@@ -419,16 +619,30 @@ class LocalBookingAgentProvider(BookingAgentProvider):
                 state.pref_after_hour is not None,
                 state.pref_before_hour is not None,
                 state.pref_first_slot,
+                state.requested_week,
+                state.requested_period is not None,
             ]
         )
 
     def _store_prefs(self, state: BookingSessionState, intent: DetectedIntent) -> None:
-        state.pref_date_from = intent.date_from
-        state.pref_weekday = intent.weekday
-        state.pref_after_hour = intent.after_hour
-        state.pref_before_hour = intent.before_hour
+        if intent.date_from is not None:
+            state.pref_date_from = intent.date_from
+            state.requested_date = intent.date_from
+        if intent.weekday is not None:
+            state.pref_weekday = intent.weekday
+            state.requested_weekday = intent.weekday
+        if intent.after_hour is not None:
+            state.pref_after_hour = intent.after_hour
+            state.requested_after_hour = intent.after_hour
+        if intent.before_hour is not None:
+            state.pref_before_hour = intent.before_hour
+            state.requested_before_hour = intent.before_hour
+        if intent.period is not None:
+            state.requested_period = intent.period
         state.pref_first_slot = intent.first_slot
         state.pref_days = intent.days
+        if intent.days and intent.days >= 7 and intent.date_from:
+            state.requested_week = True
 
     def _clear_prefs(self, state: BookingSessionState) -> None:
         state.pref_date_from = None
@@ -451,6 +665,8 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         self,
         db: Session,
         state: BookingSessionState,
+        *,
+        intro: str | None = None,
     ) -> BookingAgentResponse:
         state.selected_slot = None
         state.step = "choose_slot"
@@ -500,8 +716,7 @@ class LocalBookingAgentProvider(BookingAgentProvider):
                 return BookingAgentResponse(
                     session_id=state.session_id,
                     assistant_message=(
-                        "Não encontrei horário nesse período.\n\n"
-                        "Mas separei os próximos disponíveis:"
+                        "Não encontrei vaga nesse período, mas achei estas opções próximas:"
                     ),
                     step="choose_slot",
                     slot_cards=self._slot_cards(state),
@@ -523,14 +738,15 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         state.current_slots = slots
         self._clear_prefs(state)
         if first:
-            intro = "O primeiro horário disponível é este. É só tocar para escolher:"
+            tail = "O primeiro horário disponível é este. É só tocar para escolher:"
         elif had_filter:
-            intro = "Encontrei estes horários para você. Qual deles você prefere?"
+            tail = "Encontrei estas opções:"
         else:
-            intro = "Encontrei estes horários para você. Qual deles você prefere?"
+            tail = "Encontrei estes horários para você. Qual deles você prefere?"
+        message = f"{intro}\n\n{tail}" if intro else tail
         return BookingAgentResponse(
             session_id=state.session_id,
-            assistant_message=intro,
+            assistant_message=message,
             step="choose_slot",
             slot_cards=self._slot_cards(state),
             choices=self._slot_choices(),
@@ -546,7 +762,7 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         if state.service_id is None:
             return BookingAgentResponse(
                 session_id=state.session_id,
-                assistant_message="Para ver horários, escolha um serviço primeiro.",
+                assistant_message="Para ver horários, me diga qual serviço você deseja.",
                 step="choose_service",
                 choices=self._service_choices(state),
             )
@@ -568,7 +784,7 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         if state.service_id is None:
             return BookingAgentResponse(
                 session_id=state.session_id,
-                assistant_message="Para ver horários, escolha um serviço primeiro.",
+                assistant_message="Para ver horários, me diga qual serviço você deseja.",
                 step="choose_service",
                 choices=self._service_choices(state),
             )
@@ -787,13 +1003,28 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         self,
         state: BookingSessionState,
         requested_label: str | None,
+        *,
+        lead: str | None = None,
     ) -> BookingAgentResponse:
         available_lines = [f"• {s['name']}" for s in state.services]
         in_confirm = state.step == "confirm" and state.selected_slot is not None
-        lines = ["No momento essa barbearia tem disponível:", "", *available_lines, ""]
+        lines: list[str] = []
+        if lead:
+            lines.extend([lead, ""])
         if requested_label:
-            lines.append(f'O serviço "{requested_label}" ainda não está cadastrado.')
-            lines.append("")
+            lines.extend(
+                [
+                    f"Entendi. Você procura {requested_label}.",
+                    "",
+                    "No momento esse serviço ainda não está cadastrado nesta barbearia.",
+                    "",
+                    "Hoje ela oferece:",
+                    *available_lines,
+                    "",
+                ]
+            )
+        else:
+            lines.extend(["Hoje ela oferece:", "", *available_lines, ""])
         if in_confirm:
             lines.append("Mantive seu agendamento atual. Deseja confirmar?")
             return BookingAgentResponse(
@@ -805,7 +1036,7 @@ class LocalBookingAgentProvider(BookingAgentProvider):
                 requires_confirmation=True,
             )
         if len(state.services) == 1:
-            lines.append(f"Quer escolher {state.services[0]['name']}?")
+            lines.append(f"Quer seguir com {state.services[0]['name']}?")
         else:
             lines.append("Quer escolher um destes?")
         state.step = "choose_service"
@@ -844,6 +1075,31 @@ class LocalBookingAgentProvider(BookingAgentProvider):
             booking_summary=self._summary(state),
         )
 
+    def _change_slot_menu(self, db: Session, state: BookingSessionState) -> BookingAgentResponse:
+        state.selected_slot = None
+        state.step = "choose_slot"
+        if state.barber_id:
+            message = (
+                "Claro. Vou mostrar outras opções para você.\n\n"
+                "Você prefere manter o mesmo barbeiro?"
+            )
+            choices = [
+                BookingAgentChoice(label=f"Manter {state.barber_name}", action="change_slot"),
+                BookingAgentChoice(label="Trocar barbeiro", action="change_barber"),
+            ]
+            return BookingAgentResponse(
+                session_id=state.session_id,
+                assistant_message=message,
+                step="choose_slot",
+                choices=choices,
+                booking_summary=self._summary(state),
+            )
+        return self._show_filtered_slots(
+            db,
+            state,
+            intro="Claro. Vou mostrar outras opções para você.",
+        )
+
     def _change_service_menu(self, state: BookingSessionState) -> BookingAgentResponse:
         state.step = "choose_service"
         state.selected_slot = None
@@ -865,7 +1121,7 @@ class LocalBookingAgentProvider(BookingAgentProvider):
         choices.append(BookingAgentChoice(label="Primeiro disponível", action="barber:any"))
         return BookingAgentResponse(
             session_id=state.session_id,
-            assistant_message="Combinado. Com qual barbeiro você prefere?",
+            assistant_message="Sem problema. Com qual barbeiro você prefere agora?",
             step="choose_barber",
             choices=choices,
             booking_summary=self._summary(state),

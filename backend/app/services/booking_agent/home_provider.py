@@ -5,6 +5,14 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.schemas.booking_agent import BookingAgentChoice, BookingAgentResponse, BookingSlotCard
+from app.services.booking_agent.context import (
+    apply_parsed_to_state,
+    describe_noted_context,
+    describe_service_period,
+    has_booking_signals,
+    parse_message,
+    sync_legacy_fields,
+)
 from app.services.booking_agent.intent import detect_home_intent, normalize_text
 from app.services.booking_agent.local_provider import LocalBookingAgentProvider
 from app.services.booking_agent.session import BookingSessionState
@@ -27,10 +35,19 @@ class HomeLocalBookingAgentProvider:
             barbershop = get_barbershop_by_slug(db, state.slug)
             return self._shop_provider.handle_message(db, barbershop, state, message)
 
+        if message not in ("", "__start__") and not message.startswith("action:"):
+            parsed = parse_message(message)
+            if has_booking_signals(parsed):
+                apply_parsed_to_state(state, parsed)
+                state.booking_intent = state.booking_intent or "book"
+                sync_legacy_fields(state)
+
         intent = detect_home_intent(message, state.shop_choices)
 
+        if intent.name == "booking_context":
+            return self._booking_context(state, message)
         if intent.name == "greeting":
-            return self._welcome(state)
+            return self._greeting(state)
         if intent.name == "help":
             return self._help(state)
         if intent.name == "help_link":
@@ -45,15 +62,64 @@ class HomeLocalBookingAgentProvider:
             return self._select_shop(db, state, intent.entities.get("index"))
         return self._unknown(state)
 
+    def _greeting(self, state: BookingSessionState) -> BookingAgentResponse:
+        if state.has_greeted and (
+            state.booking_intent or state.pending_service_query or state.service_id
+        ):
+            return self._booking_context(state, "", short=True)
+        if state.has_greeted:
+            state.step = "choose_barbershop"
+            return BookingAgentResponse(
+                session_id=state.session_id,
+                assistant_message="Oi! Em qual barbearia você quer agendar?",
+                step=state.step,
+                choices=[
+                    BookingAgentChoice(label="Ver barbearias disponíveis", action="list_shops"),
+                ],
+            )
+        state.has_greeted = True
+        return self._welcome(state)
+
     def _welcome(self, state: BookingSessionState) -> BookingAgentResponse:
         state.step = "choose_barbershop"
         return BookingAgentResponse(
             session_id=state.session_id,
             assistant_message=(
                 "Olá, eu sou a assistente de agendamento do BarberAI.\n\n"
-                "Posso te ajudar a encontrar um horário.\n"
-                "Você já sabe em qual barbearia deseja agendar?"
+                "Posso ajudar você a escolher serviço, barbeiro e horário.\n"
+                "Em qual barbearia deseja agendar?"
             ),
+            step=state.step,
+            choices=[
+                BookingAgentChoice(label="Ver barbearias disponíveis", action="list_shops"),
+            ],
+        )
+
+    def _booking_context(
+        self,
+        state: BookingSessionState,
+        message: str,
+        *,
+        short: bool = False,
+    ) -> BookingAgentResponse:
+        state.step = "choose_barbershop"
+        state.booking_intent = state.booking_intent or "book"
+        noted = describe_noted_context(state)
+        service_period = describe_service_period(state)
+
+        if short and noted:
+            lead = f"Claro, {noted.lower()}."
+        elif noted:
+            lead = (
+                f"Claro, vou te ajudar com isso.\n\n"
+                f"Você quer {service_period}."
+            )
+        else:
+            lead = "Claro, vou te ajudar com o agendamento."
+
+        return BookingAgentResponse(
+            session_id=state.session_id,
+            assistant_message=f"{lead}\n\nEm qual barbearia deseja agendar?",
             step=state.step,
             choices=[
                 BookingAgentChoice(label="Ver barbearias disponíveis", action="list_shops"),
@@ -65,8 +131,12 @@ class HomeLocalBookingAgentProvider:
         return BookingAgentResponse(
             session_id=state.session_id,
             assistant_message=(
-                "Posso te ajudar a encontrar uma barbearia e agendar um horário.\n\n"
-                "É só me dizer o nome da barbearia ou pedir para ver as opções disponíveis."
+                "Posso ajudar você a escolher serviço, barbeiro e horário.\n\n"
+                "Por exemplo:\n"
+                "“Quero cabelo amanhã à tarde”\n"
+                "“Tem horário sábado?”\n"
+                "“Quero o primeiro horário disponível”\n\n"
+                "Me diga o nome da barbearia ou peça para ver as opções disponíveis."
             ),
             step=state.step,
             choices=[
@@ -79,8 +149,8 @@ class HomeLocalBookingAgentProvider:
         return BookingAgentResponse(
             session_id=state.session_id,
             assistant_message=(
-                "Se você já tem o link da barbearia, é só abri-lo que eu começo o "
-                "agendamento por lá.\n\n"
+                "Se você já tem o link da barbearia, é só abri-lo que eu continuo "
+                "o agendamento por lá.\n\n"
                 "Se preferir, posso te mostrar as barbearias disponíveis aqui."
             ),
             step=state.step,
@@ -93,9 +163,7 @@ class HomeLocalBookingAgentProvider:
         state.step = "choose_barbershop"
         return BookingAgentResponse(
             session_id=state.session_id,
-            assistant_message=(
-                "Sem problema. Qual é o nome da barbearia que você procura?"
-            ),
+            assistant_message="Sem problema. Qual é o nome da barbearia que você procura?",
             step=state.step,
             choices=[
                 BookingAgentChoice(label="Ver barbearias disponíveis", action="list_shops"),
@@ -104,12 +172,20 @@ class HomeLocalBookingAgentProvider:
 
     def _unknown(self, state: BookingSessionState) -> BookingAgentResponse:
         state.step = "choose_barbershop"
-        return BookingAgentResponse(
-            session_id=state.session_id,
-            assistant_message=(
+        if state.pending_service_query or state.booking_intent:
+            noted = describe_noted_context(state)
+            msg = (
+                f"{noted.capitalize() if noted else 'Entendi'}.\n\n"
+                "Em qual barbearia deseja agendar?"
+            )
+        else:
+            msg = (
                 "Posso te ajudar a agendar um horário.\n\n"
                 "Me diga o nome da barbearia ou peça para ver as opções disponíveis."
-            ),
+            )
+        return BookingAgentResponse(
+            session_id=state.session_id,
+            assistant_message=msg,
             step=state.step,
             choices=[
                 BookingAgentChoice(label="Ver barbearias disponíveis", action="list_shops"),
@@ -131,6 +207,12 @@ class HomeLocalBookingAgentProvider:
         if not shops:
             return self._no_result(state, query)
 
+        context_line = ""
+        if state.pending_service_query or state.service_name:
+            noted = describe_noted_context(state)
+            if noted:
+                context_line = f"{noted.capitalize()}.\n\n"
+
         if searched and query.strip():
             norm_query = normalize_text(query)
             exact = [i for i, s in enumerate(shops) if normalize_text(s.name) == norm_query]
@@ -140,14 +222,17 @@ class HomeLocalBookingAgentProvider:
                 return self._found_named(state, shops[0].name, 0)
 
         if len(shops) == 1:
-            return self._single_offer(state, shops[0].name)
+            return self._single_offer(state, shops[0].name, context_line)
 
-        return self._multiple(state, shops)
+        return self._multiple(state, shops, context_line)
 
     def _found_named(self, state: BookingSessionState, name: str, index: int) -> BookingAgentResponse:
+        noted = describe_noted_context(state)
+        prefix = f"{noted.capitalize()}.\n\n" if noted else ""
         return BookingAgentResponse(
             session_id=state.session_id,
             assistant_message=(
+                f"{prefix}"
                 f"Encontrei a {name}.\n\n"
                 "Posso te ajudar a escolher serviço, barbeiro e horário.\n"
                 "Vamos começar?"
@@ -159,10 +244,11 @@ class HomeLocalBookingAgentProvider:
             ],
         )
 
-    def _single_offer(self, state: BookingSessionState, name: str) -> BookingAgentResponse:
+    def _single_offer(self, state: BookingSessionState, name: str, context_line: str) -> BookingAgentResponse:
         return BookingAgentResponse(
             session_id=state.session_id,
             assistant_message=(
+                f"{context_line}"
                 "Encontrei uma barbearia disponível para agendamento:\n\n"
                 f"{name}\n\n"
                 "Quer agendar seu horário agora?"
@@ -174,7 +260,7 @@ class HomeLocalBookingAgentProvider:
             ],
         )
 
-    def _multiple(self, state: BookingSessionState, shops: list) -> BookingAgentResponse:
+    def _multiple(self, state: BookingSessionState, shops: list, context_line: str) -> BookingAgentResponse:
         cards = [
             BookingSlotCard(label=shop.name, action=f"shop:{index}")
             for index, shop in enumerate(shops)
@@ -182,6 +268,7 @@ class HomeLocalBookingAgentProvider:
         return BookingAgentResponse(
             session_id=state.session_id,
             assistant_message=(
+                f"{context_line}"
                 "Encontrei algumas barbearias disponíveis para agendamento.\n\n"
                 "Qual delas você prefere?"
             ),
@@ -232,4 +319,4 @@ class HomeLocalBookingAgentProvider:
         state.slug = barbershop.slug
         state.barbershop_id = barbershop.id
         state.barbershop_name = barbershop.name
-        return self._shop_provider._welcome(db, state)
+        return self._shop_provider.continue_after_shop_select(db, barbershop, state)

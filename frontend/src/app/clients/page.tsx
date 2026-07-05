@@ -2,8 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { buttonPrimaryClassName, Field, inputClassName } from "@/components/AuthShell";
+import { Field, Input, Textarea } from "@/components/ui/Input";
 import { WhatsAppButton, WhatsAppLink } from "@/components/WhatsAppLink";
+import {
+  Alert,
+  Button,
+  ConfirmDialog,
+  EmptyState,
+  Loading,
+  Modal,
+  StatusBadge,
+} from "@/components/ui";
 import {
   ApiError,
   createClient,
@@ -32,6 +41,7 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<Client | null>(null);
   const [editing, setEditing] = useState<Client | null>(null);
   const [form, setForm] = useState<ClientForm>(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -122,10 +132,11 @@ export default function ClientsPage() {
     }
   }
 
-  async function handleDeactivate(client: Client) {
-    if (!confirm(`Desativar o cliente ${client.full_name}?`)) return;
+  async function confirmDeactivate() {
+    if (!deactivateTarget) return;
     try {
-      await deactivateClient(client.id);
+      await deactivateClient(deactivateTarget.id);
+      setDeactivateTarget(null);
       await loadClients(search.trim() || undefined);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Erro ao desativar cliente.");
@@ -133,106 +144,112 @@ export default function ClientsPage() {
   }
 
   return (
-    <AppShell title="Clientes e histórico">
+    <AppShell
+      title="Clientes"
+      description="Histórico e contato com clientes"
+    >
       {!canManage && !loading && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-          {error ?? "Permissão insuficiente para acessar clientes."}
-        </div>
+        <Alert variant="warning">{error ?? "Permissão insuficiente para acessar clientes."}</Alert>
       )}
 
       {canManage && (
         <>
-          <p className="mb-6 text-sm text-muted">
-            Clientes serão criados automaticamente a partir de agendamentos. Aqui você consulta
+          <p className="mb-6 text-sm leading-relaxed text-muted">
+            Clientes são criados automaticamente a partir de agendamentos. Aqui você consulta
             histórico, atualiza dados e entra em contato pelo WhatsApp.
           </p>
 
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <form onSubmit={handleSearch} className="flex flex-1 gap-2">
-              <input
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <form onSubmit={handleSearch} className="flex min-w-0 flex-1 gap-2">
+              <Input
                 type="search"
                 placeholder="Buscar por nome ou WhatsApp..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className={inputClassName}
+                aria-label="Buscar clientes"
               />
-              <button type="submit" className="shrink-0 rounded-lg border border-border px-4 py-2 text-sm text-slate-200">
+              <Button type="submit" variant="secondary" className="shrink-0">
                 Buscar
-              </button>
+              </Button>
             </form>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="shrink-0 text-sm text-muted underline-offset-2 hover:text-slate-200 hover:underline"
-            >
+            <Button variant="ghost" size="sm" onClick={openCreate} className="shrink-0 self-start">
               Cadastro manual
-            </button>
+            </Button>
           </div>
 
-          {loading && <p className="text-muted">Carregando clientes...</p>}
-          {error && canManage && (
-            <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {error}
-            </div>
-          )}
+          {loading && <Loading label="Carregando clientes..." />}
+          {error && canManage && <Alert variant="error" className="mb-4">{error}</Alert>}
 
           {!loading && !error && clients.length === 0 && (
-            <p className="rounded-xl border border-border bg-card px-4 py-8 text-center text-muted">
-              Nenhum cliente encontrado.
-            </p>
+            <EmptyState
+              title="Nenhum cliente encontrado"
+              description="Quando clientes agendarem horários, eles aparecerão aqui automaticamente."
+            />
           )}
 
           {!loading && clients.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="min-w-full text-sm">
-                <thead className="border-b border-border bg-card text-left text-muted">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Nome</th>
-                    <th className="px-4 py-3 font-medium">WhatsApp</th>
-                    <th className="px-4 py-3 font-medium">E-mail</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((client) => (
-                    <tr key={client.id} className="border-b border-border/60">
-                      <td className="px-4 py-3 text-white">{client.full_name}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1">
-                          <WhatsAppLink phone={client.phone} />
-                          <WhatsAppButton phone={client.phone} />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">{client.email ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <StatusBadge active={client.is_active} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(client)}
-                            className="text-accent hover:underline"
-                          >
-                            Editar
-                          </button>
-                          {client.is_active && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeactivate(client)}
-                              className="text-red-300 hover:underline"
-                            >
-                              Desativar
-                            </button>
-                          )}
-                        </div>
-                      </td>
+            <>
+              {/* Mobile cards */}
+              <div className="space-y-3 md:hidden">
+                {clients.map((client) => (
+                  <ClientCard
+                    key={client.id}
+                    client={client}
+                    onEdit={() => openEdit(client)}
+                    onDeactivate={() => setDeactivateTarget(client)}
+                  />
+                ))}
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden overflow-x-auto rounded-2xl border border-border md:block">
+                <table className="min-w-full text-sm">
+                  <thead className="border-b border-border bg-card text-left text-muted">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Nome</th>
+                      <th className="px-4 py-3 font-medium">WhatsApp</th>
+                      <th className="px-4 py-3 font-medium">E-mail</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                      <th className="px-4 py-3 font-medium">Ações</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {clients.map((client) => (
+                      <tr key={client.id} className="border-b border-border/60">
+                        <td className="px-4 py-3 font-medium text-white">{client.full_name}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-1">
+                            <WhatsAppLink phone={client.phone} />
+                            <WhatsAppButton phone={client.phone} />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-muted">{client.email ?? "—"}</td>
+                        <td className="px-4 py-3">
+                          <StatusBadge active={client.is_active} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => openEdit(client)}>
+                              Editar
+                            </Button>
+                            {client.is_active && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-300"
+                                onClick={() => setDeactivateTarget(client)}
+                              >
+                                Desativar
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </>
       )}
@@ -241,84 +258,90 @@ export default function ClientsPage() {
         <Modal title={editing ? "Editar cliente" : "Novo cliente"} onClose={() => setModalOpen(false)}>
           <form onSubmit={handleSubmit} className="space-y-4">
             <Field label="Nome" id="full_name">
-              <input
+              <Input
                 id="full_name"
                 required
                 value={form.full_name}
                 onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                className={inputClassName}
               />
             </Field>
             <Field label="WhatsApp" id="phone">
-              <input
+              <Input
                 id="phone"
                 required
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className={inputClassName}
               />
             </Field>
             <Field label="E-mail (opcional)" id="email">
-              <input
+              <Input
                 id="email"
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className={inputClassName}
               />
             </Field>
             <Field label="Observações (opcional)" id="notes">
-              <textarea
+              <Textarea
                 id="notes"
                 rows={3}
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className={inputClassName}
               />
             </Field>
-            {formError && <p className="text-sm text-red-300">{formError}</p>}
-            <button type="submit" disabled={saving} className={buttonPrimaryClassName}>
+            {formError && <Alert variant="error">{formError}</Alert>}
+            <Button type="submit" disabled={saving} fullWidth>
               {saving ? "Salvando..." : "Salvar"}
-            </button>
+            </Button>
           </form>
         </Modal>
+      )}
+
+      {deactivateTarget && (
+        <ConfirmDialog
+          title="Desativar cliente"
+          message={`Deseja desativar ${deactivateTarget.full_name}? O histórico será mantido.`}
+          confirmLabel="Desativar"
+          onConfirm={confirmDeactivate}
+          onCancel={() => setDeactivateTarget(null)}
+        />
       )}
     </AppShell>
   );
 }
 
-function StatusBadge({ active }: { active: boolean }) {
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-xs ${
-        active ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-500/20 text-slate-400"
-      }`}
-    >
-      {active ? "Ativo" : "Inativo"}
-    </span>
-  );
-}
-
-function Modal({
-  title,
-  children,
-  onClose,
+function ClientCard({
+  client,
+  onEdit,
+  onDeactivate,
 }: {
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
+  client: Client;
+  onEdit: () => void;
+  onDeactivate: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">{title}</h2>
-          <button type="button" onClick={onClose} className="text-muted hover:text-white">
-            ✕
-          </button>
+    <article className="rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-semibold text-white">{client.full_name}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <WhatsAppLink phone={client.phone} />
+            <WhatsAppButton phone={client.phone} />
+          </div>
+          {client.email && <p className="mt-2 text-sm text-muted">{client.email}</p>}
         </div>
-        {children}
+        <StatusBadge active={client.is_active} />
       </div>
-    </div>
+      <div className="mt-4 flex gap-2">
+        <Button variant="secondary" size="sm" onClick={onEdit}>
+          Editar
+        </Button>
+        {client.is_active && (
+          <Button variant="danger" size="sm" onClick={onDeactivate}>
+            Desativar
+          </Button>
+        )}
+      </div>
+    </article>
   );
 }

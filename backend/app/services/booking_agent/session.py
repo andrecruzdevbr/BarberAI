@@ -30,6 +30,19 @@ class BookingSessionState:
     barbershop_name: str | None = None
     step: str = "welcome"
     shop_choices: list[dict[str, Any]] = field(default_factory=list)
+    # Contexto conversacional explícito
+    booking_intent: str | None = None
+    pending_service_query: str | None = None
+    resolved_service_id: UUID | None = None
+    pending_barber_query: str | None = None
+    resolved_barber_id: UUID | None = None
+    requested_date: date | None = None
+    requested_weekday: int | None = None
+    requested_week: bool = False
+    requested_after_hour: int | None = None
+    requested_before_hour: int | None = None
+    requested_period: str | None = None
+    has_greeted: bool = False
     service_id: UUID | None = None
     service_name: str | None = None
     barber_id: UUID | None = None

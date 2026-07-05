@@ -120,8 +120,12 @@ Frontend: `NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1` em `frontend/.env.e
 - [x] Preparação para confirmação por WhatsApp
 - [x] Agenda interna com agendamentos reais
 - [x] Agendamento público por link (`/barbearia/[slug]`)
+- [x] Assistente conversacional de agendamento (sem cadastro do cliente)
 - [x] Cálculo de disponibilidade com conflitos e intervalos de 30 min
 - [x] Clientes criados automaticamente pelo WhatsApp no agendamento
+- [x] Interface responsiva (mobile, tablet e desktop)
+- [x] Painel administrativo com menu mobile
+- [x] Experiência mobile otimizada para chat público e agenda
 - [ ] Confirmação automática por WhatsApp *(requer integração Business)*
 - [ ] QR Code *(futuro)*
 
